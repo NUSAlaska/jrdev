@@ -156,7 +156,6 @@ func LoadPreset(fsys fs.FS, id string) (Preset, error) {
 			if found != nil {
 				return Preset{}, fmt.Errorf("load preset: multiple files define meta.id %q", id)
 			}
-			p := p
 			found = &p
 		}
 	}

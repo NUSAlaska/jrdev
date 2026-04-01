@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"testing/fstest"
 )
 
 //go:embed testdata/preset_registry/*.yaml
@@ -141,6 +142,9 @@ func TestParsePresetYAML_validation(t *testing.T) {
 	}{
 		{"missing meta.id", "meta:\n  title: x\n", true},
 		{"missing meta.title", "meta:\n  id: a\n", true},
+		{"whitespace-only meta.id", "meta:\n  id: \"   \"\n  title: A\n", true},
+		{"whitespace-only meta.title", "meta:\n  id: a\n  title: \"   \"\n", true},
+		{"invalid yaml", "meta: [unclosed\n", true},
 		{"ok minimal lists", "meta:\n  id: a\n  title: A\n", false},
 	}
 	for _, tt := range tests {
@@ -150,6 +154,62 @@ func TestParsePresetYAML_validation(t *testing.T) {
 				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestDiscoverPresets_empty(t *testing.T) {
+	got, err := DiscoverPresets(fstest.MapFS{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("DiscoverPresets() = %#v, want empty", got)
+	}
+}
+
+func TestDiscoverPresets_ignoresNonYaml(t *testing.T) {
+	fsys := fstest.MapFS{
+		"readme.txt": {Data: []byte("not a preset")},
+		"go.yaml":    {Data: []byte("meta:\n  id: go\n  title: Go\n")},
+	}
+	got, err := DiscoverPresets(fsys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []PresetSummary{{ID: "go", Title: "Go", Description: ""}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("DiscoverPresets() = %#v, want %#v", got, want)
+	}
+}
+
+func TestLoadPreset_whitespaceIDRejected(t *testing.T) {
+	fsys := fstest.MapFS{
+		"x.yaml": {Data: []byte("meta:\n  id: x\n  title: X\n")},
+	}
+	_, err := LoadPreset(fsys, "   ")
+	if err == nil {
+		t.Fatal("expected error for whitespace-only id")
+	}
+}
+
+func TestLoadPreset_fastPathMetaIDMismatch(t *testing.T) {
+	fsys := fstest.MapFS{
+		"rust.yaml": {Data: []byte("meta:\n  id: not-rust\n  title: Rust\n")},
+	}
+	_, err := LoadPreset(fsys, "rust")
+	if err == nil {
+		t.Fatal("expected error when file name id.yaml does not match meta.id")
+	}
+}
+
+func TestLoadPreset_scanDuplicateMetaID(t *testing.T) {
+	fsys := fstest.MapFS{
+		"a.yaml": {Data: []byte("meta:\n  id: same\n  title: A\n")},
+		"b.yaml": {Data: []byte("meta:\n  id: same\n  title: B\n")},
+	}
+	_, err := LoadPreset(fsys, "same")
+	if err == nil {
+		t.Fatal("expected error when multiple yaml files define the same meta.id")
 	}
 }
 
