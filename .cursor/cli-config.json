@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(go)",
+      "Shell(git)",
+      "Shell(gh)",
+      "Read(**)",
+      "Write(**)",
+      "Shell(rm)"
+    ],
+    "deny": []
+  },
+  "version": 1,
+  "editor": {
+    "vimMode": false
+  },
+  "model": {
+    "modelId": "composer-2-fast",
+    "displayModelId": "composer-2-fast",
+    "displayName": "Composer 2 Fast",
+    "displayNameShort": "Composer 2 Fast",
+    "aliases": [
+      "composer"
+    ],
+    "maxMode": false
+  },
+  "hasChangedDefaultModel": true,
+  "maxMode": false,
+  "privacyCache": {
+    "ghostMode": true,
+    "privacyMode": 1,
+    "updatedAt": 1775079625464
+  },
+  "authInfo": {
+    "email": "daniel@nusalaska.com",
+    "displayName": "Daniel Kranich",
+    "userId": 196381897,
+    "authId": "google-oauth2|user_01JSYJBYZBV4PTBJ98XTCMPHCF"
+  },
+  "network": {
+    "useHttp1ForAgent": false
+  }
+}
