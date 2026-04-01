@@ -13,7 +13,39 @@
 
 **Target repository:** Run `jrdev` with your **current working directory inside the project you want to automate** (any subfolder is fine), or pass **`--repo`** with the absolute path to that project’s root. The tool finds the git root by walking up for `.git`.
 
-**Network / auth:** `gh` uses your normal GitHub authentication (`gh auth login`). For git operations, SSH or HTTPS credentials for `git push` / fetch must work for that repo.
+**Network / auth:** `gh` uses your normal GitHub authentication (`gh auth login`). For git operations, SSH or HTTPS credentials for `git push` / `git fetch` must work for that repo. On **`git fetch`** / **`git push`**, if the error looks like an SSH public-key failure, `jrdev` attempts a one-time interactive **`ssh-add`** recovery (requires a real TTY). If that still fails, follow the hints in the error or load your key before running `jrdev`.
+
+## Cursor agent CLI permissions (`-p` / headless)
+
+The Cursor **`agent`** CLI enforces **permissions** from [`cli-config.json`](https://cursor.com/docs/cli/reference/configuration) (global, project, or via **`CURSOR_CONFIG_DIR`**). In non-interactive mode, **shell** tools such as **`git`** or **`go`** only run if your config **allows** them.
+
+If you pass **`--agent-permissions`** or **`--agent-cursor-config-dir`**, that value is used and repo / executable discovery is skipped (**`--agent-cursor-config-dir`** and **`--agent-permissions`** cannot be combined).
+
+When **neither** flag is set: **`repo/.cursor/cli-config.json`** (if present), otherwise **`jrdev-agent-permissions.json`** next to the **`jrdev`** binary (if present). If neither exists, `jrdev` does not set **`CURSOR_CONFIG_DIR`** (the agent uses your normal Cursor global / project config only).
+
+Mechanisms:
+
+| Source | When |
+|--------|------|
+| **`--agent-cursor-config-dir`** | Directory that contains **`cli-config.json`** (passed through as **`CURSOR_CONFIG_DIR`**). Mutually exclusive with **`--agent-permissions`**. |
+| **`--agent-permissions`** | Path to a small JSON file: **`{"allow":["git","go"],"deny":[]}`**. Each bare name becomes a Cursor **`Shell(name)`** entry; strings that already look like permission tokens (they contain **`(`**) are left as-is. `jrdev` writes a temporary **`cli-config.json`** (and always includes **`Read(**)`** / **`Write(**)`** so file tools still work while overriding the global config). |
+| **`<repo>/.cursor/cli-config.json`** | If neither flag is set and this file exists, **`CURSOR_CONFIG_DIR`** is **`<repo>/.cursor`**. |
+| **`jrdev-agent-permissions.json`** next to the **`jrdev` executable** | If nothing above applies and this file exists, it is used like **`--agent-permissions`**. |
+
+For the full permission vocabulary (**`Read`**, **`Write`**, **`WebFetch`**, **`Mcp`**, **`Shell`** patterns), see Cursor’s [permissions reference](https://cursor.com/docs/cli/reference/permissions).
+
+**Example** `jrdev-agent-permissions.json` (or **`--agent-permissions`** file):
+
+```json
+{
+  "allow": ["git", "go", "gh"],
+  "deny": []
+}
+```
+
+With **`-v` / `--verbose`**, startup logs show whether a repo **`.cursor`** directory, a permissions file path, or **`--agent-cursor-config-dir`** is in effect.
+
+Some Cursor docs describe project permissions only in **`.cursor/cli.json`**. `jrdev` auto-discovery specifically looks for **`.cursor/cli-config.json`** next to the git root so the directory can serve as **`CURSOR_CONFIG_DIR`** (full `cli-config.json` layout). If you only have **`cli.json`**, use **`--agent-cursor-config-dir`** pointing at a folder that contains the `cli-config.json` name your install expects, or maintain **`cli-config.json`** in **`.cursor`**.
 
 ## Linux — getting set up
 
@@ -122,6 +154,8 @@ After `go install .`, replace `go run .` with **`jrdev`** (or **`jrdev.exe`**) o
 | `--integration-base` | `origin/main` | Base ref for new `agent-queue/run-…` branch |
 | `--agent` | `agent` on PATH | Cursor agent binary |
 | `--agent-model` | `composer-2-fast` | Value passed to Cursor agent as `--model` |
+| `--agent-permissions` | (see [permissions](#cursor-agent-cli-permissions--p--headless)) | JSON allow/deny file; `jrdev` materializes `cli-config.json` and sets `CURSOR_CONFIG_DIR` |
+| `--agent-cursor-config-dir` | — | Use this directory as `CURSOR_CONFIG_DIR` (must contain `cli-config.json`); mutually exclusive with `--agent-permissions` |
 | `--gh` | `gh` | GitHub CLI binary |
 | `-v` / `--verbose` | off | Verbose preflight, per-cycle phases, agent invocation summary, git subprocess output |
 | `-help`, `-h` | — | Print usage and exit |
@@ -129,7 +163,7 @@ After `go install .`, replace `go run .` with **`jrdev`** (or **`jrdev.exe`**) o
 ## Behavior (summary)
 
 1. **N** = count of open issues with the queue label; if **N == 0**, exit cleanly.
-2. **Preflight** (once): `git`, `gh auth status`, `agent` present; unless `--dry-run`, a minimal non-destructive **`agent -p`** smoke.
+2. **Preflight** (once): `git` on PATH and `git version`, `gh auth status`, **`agent`** resolved and able to run `-h` / `--help`; unless `--dry-run`, a minimal **`agent -p`** smoke that must print a fixed token (that prompt forbids shell commands and file edits). Agent invocations use the [permission / `CURSOR_CONFIG_DIR`](#cursor-agent-cli-permissions--p--headless) rules above.
 3. Creates **`agent-queue/run-<timestamp>`** and a worktree under **`--worktrees`** from **`--integration-base`**.
 4. Each **cycle**: plan (in integration worktree) → parse `<plan>…</plan>` JSON → **one** issue (first row) → issue worktree from integration tip → implement (retry once on zero commits) → review if commits → merge phase → **`go vet ./...`** and **`go test ./...`** on integration → **`gh issue close`** and remove label → push integration branch.
 5. Stops when the plan returns **`issues: []`**, or **max iterations** is reached, then **`gh pr create`** to **`main`** unless **`--skip-pr`**.
@@ -140,5 +174,7 @@ After `go install .`, replace `go run .` with **`jrdev`** (or **`jrdev.exe`**) o
 
 - **Zero commits after implement retry**: run aborts; issue is not closed; integration branch and worktrees remain under `.worktrees/` for inspection.
 - **Merge / `go vet` / `go test` failure**: fix locally in the integration or issue worktree, or remove worktrees/branches manually.
+- **SSH auth to `origin`**: ensure `ssh-add` / agent (or HTTPS) works; see **Network / auth** above. **Non-interactive** environments cannot complete interactive `ssh-add` recovery.
+- **Agent smoke or plan/implement errors about blocked tools**: configure **[Cursor agent CLI permissions](#cursor-agent-cli-permissions--p--headless)** (`repo/.cursor/cli-config.json`, `jrdev-agent-permissions.json`, or flags).
 
 See **`PROMPTS.md`** for template placeholders in the embedded prompts.

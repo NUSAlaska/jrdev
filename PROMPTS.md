@@ -41,3 +41,5 @@ Same fields as **implement** (`ImplementPromptData` / `ReviewPromptData`).
 ## Not templated
 
 The preflight **agent smoke** prompt is hardcoded in `internal/jrdev/preflight.go` (`AgentSmokePrompt`).
+
+**Cursor agent environment:** Each **`agent`** subprocess can receive **`CURSOR_CONFIG_DIR`** (permissions / `cli-config.json`) from repo defaults, flags, or **`jrdev-agent-permissions.json`**. See **`README.md`** (“Cursor agent CLI permissions”) and the implementation in `internal/jrdev/agent.go` and `internal/jrdev/agent_cursor_config.go`.
