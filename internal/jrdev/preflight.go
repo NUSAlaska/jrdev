@@ -78,9 +78,24 @@ func RunPreflight(cfg Config, agent AgentRunner, log func(string, ...any)) error
 	if smokeErr != nil {
 		return fmt.Errorf("jrdev preflight: agent smoke: %w", smokeErr)
 	}
-	if !strings.Contains(smokeOut, AgentSmokeExpectedToken) {
-		return fmt.Errorf("jrdev preflight: agent smoke output missing %q (got output len %d)", AgentSmokeExpectedToken, len(smokeOut))
+	if err := validateAgentSmokeOutput(smokeOut); err != nil {
+		vlog(cfg, log, "jrdev: verbose: preflight — agent smoke validation failed; retrying once with correction\n")
+		retryPrompt := AppendAgentOutputRetryInstructions(AgentSmokePrompt, "Agent smoke (preflight)", err, smokeOut)
+		smokeOut, smokeErr = agent.Run(cfg, cfg.RepoRoot, retryPrompt, AgentRunOptions{Print: true})
+		if smokeErr != nil {
+			return fmt.Errorf("jrdev preflight: agent smoke retry: %w", smokeErr)
+		}
+		if err := validateAgentSmokeOutput(smokeOut); err != nil {
+			return fmt.Errorf("jrdev preflight: %w", err)
+		}
 	}
 	vlog(cfg, log, "jrdev: verbose: preflight — agent smoke ok\n")
 	return nil
+}
+
+func validateAgentSmokeOutput(out string) error {
+	if strings.Contains(out, AgentSmokeExpectedToken) {
+		return nil
+	}
+	return fmt.Errorf("agent smoke output missing expected token %q (output length %d)", AgentSmokeExpectedToken, len(out))
 }

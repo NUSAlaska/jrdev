@@ -91,6 +91,8 @@ func (g GitOps) CreateIntegrationBranchAndWorktree(worktreesRoot, baseRev string
 }
 
 // CreateIssueWorktree adds a worktree on a new branch at integrationBranch's tip.
+// If issueBranch already exists from a prior crashed run, linked worktrees and the branch
+// are removed (and a leftover workAbs directory is deleted), then the add is retried once.
 func (g GitOps) CreateIssueWorktree(workAbs, integrationBranch, issueBranch string) (baseSHA string, err error) {
 	baseSHA, err = g.gitOutput("rev-parse", integrationBranch)
 	if err != nil {
@@ -99,10 +101,106 @@ func (g GitOps) CreateIssueWorktree(workAbs, integrationBranch, issueBranch stri
 	if err := os.MkdirAll(filepath.Dir(workAbs), 0o755); err != nil {
 		return "", err
 	}
-	if err := g.git("worktree", "add", workAbs, "-b", issueBranch, integrationBranch); err != nil {
-		return "", err
+	add := func() error {
+		return g.git("worktree", "add", workAbs, "-b", issueBranch, integrationBranch)
+	}
+	if err := add(); err != nil {
+		if !isIssueWorktreeBranchExistsError(err) {
+			return "", err
+		}
+		fmt.Fprintf(os.Stderr, "jrdev: branch %q already exists (likely stale from a prior run) — removing worktrees and branch, retrying\n", issueBranch)
+		if cerr := g.cleanupStaleIssueBranch(issueBranch, workAbs); cerr != nil {
+			return "", fmt.Errorf("%w\nstale branch cleanup: %v", err, cerr)
+		}
+		if err := add(); err != nil {
+			return "", err
+		}
 	}
 	return baseSHA, nil
+}
+
+func isIssueWorktreeBranchExistsError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "already exists") && strings.Contains(msg, "branch named")
+}
+
+func (g GitOps) cleanupStaleIssueBranch(issueBranch, workAbs string) error {
+	wantRef := "refs/heads/" + issueBranch
+	paths, err := g.worktreePathsForBranchRef(wantRef)
+	if err != nil {
+		return err
+	}
+	seen := make(map[string]struct{}, len(paths)+1)
+	for _, p := range paths {
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		if err := g.git("worktree", "remove", "--force", p); err != nil {
+			return fmt.Errorf("worktree remove %q: %w", p, err)
+		}
+	}
+	// workAbs may still be registered (e.g. detached or mismatch) from a partial run
+	_ = g.git("worktree", "remove", "--force", workAbs)
+	_ = g.git("worktree", "prune")
+	if g.branchExists(issueBranch) {
+		if err := g.git("branch", "-D", issueBranch); err != nil {
+			return err
+		}
+	}
+	if st, err := os.Stat(workAbs); err == nil && st.IsDir() {
+		if err := os.RemoveAll(workAbs); err != nil {
+			return fmt.Errorf("remove leftover issue worktree dir %q: %w", workAbs, err)
+		}
+	}
+	return nil
+}
+
+func (g GitOps) branchExists(branch string) bool {
+	c := exec.Command("git", "rev-parse", "--verify", "refs/heads/"+branch)
+	c.Dir = g.RepoRoot
+	if err := c.Run(); err != nil {
+		return false
+	}
+	return true
+}
+
+// worktreePathsForBranchRef returns absolute worktree paths whose HEAD branch ref matches wantRef (e.g. refs/heads/foo/bar).
+func (g GitOps) worktreePathsForBranchRef(wantRef string) ([]string, error) {
+	out, err := g.gitOutput("worktree", "list", "--porcelain")
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	var curPath, curBranch string
+	flush := func() {
+		if curPath == "" {
+			return
+		}
+		if curBranch == wantRef {
+			paths = append(paths, curPath)
+		}
+		curPath, curBranch = "", ""
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			flush()
+			continue
+		}
+		if strings.HasPrefix(line, "worktree ") {
+			flush()
+			curPath = strings.Trim(strings.TrimPrefix(line, "worktree "), `"`)
+			continue
+		}
+		if strings.HasPrefix(line, "branch ") {
+			curBranch = strings.TrimSpace(strings.TrimPrefix(line, "branch "))
+		}
+	}
+	flush()
+	return paths, nil
 }
 
 // RemoveWorktree removes a linked worktree.

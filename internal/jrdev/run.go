@@ -99,7 +99,17 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 		vlog(cfg, log, "jrdev: verbose: plan phase — agent output %d bytes\n", len(planOut))
 		doc, err := ParsePlan(planOut)
 		if err != nil {
-			return fmt.Errorf("plan parse: %w", err)
+			vlog(cfg, log, "jrdev: verbose: plan parse failed (%v); retrying once with correction\n", err)
+			retryPrompt := AppendAgentOutputRetryInstructions(planBody, "Plan phase", err, planOut)
+			planOut, err = agent.Run(cfg, intPath, retryPrompt, AgentRunOptions{Print: true})
+			if err != nil {
+				return fmt.Errorf("plan phase retry: %w", err)
+			}
+			vlog(cfg, log, "jrdev: verbose: plan phase — retry agent output %d bytes\n", len(planOut))
+			doc, err = ParsePlan(planOut)
+			if err != nil {
+				return fmt.Errorf("plan parse: %w", err)
+			}
 		}
 		if len(doc.Issues) == 0 {
 			log("jrdev: planner returned no issues — stopping.\n")
@@ -187,8 +197,20 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 			return err
 		}
 		vlog(cfg, log, "jrdev: verbose: merge phase (agent) — prompt %d bytes (integration worktree=%s)\n", len(mergeBody), intPath)
-		if _, err := agent.Run(cfg, intPath, mergeBody, AgentRunOptions{Print: true}); err != nil {
+		mergeOut, err := agent.Run(cfg, intPath, mergeBody, AgentRunOptions{Print: true})
+		if err != nil {
 			return fmt.Errorf("merge phase: %w", err)
+		}
+		if err := ValidateMergeAgentOutput(mergeOut); err != nil {
+			vlog(cfg, log, "jrdev: verbose: merge phase output validation failed; retrying once with correction\n")
+			retryMerge := AppendAgentOutputRetryInstructions(mergeBody, "Merge phase", err, mergeOut)
+			mergeOut, err = agent.Run(cfg, intPath, retryMerge, AgentRunOptions{Print: true})
+			if err != nil {
+				return fmt.Errorf("merge phase retry: %w", err)
+			}
+			if err := ValidateMergeAgentOutput(mergeOut); err != nil {
+				return err
+			}
 		}
 		merged, err := BranchMergedIntoHead(intPath, job.Branch)
 		if err != nil {
