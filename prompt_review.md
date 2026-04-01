@@ -72,11 +72,11 @@ Follow the established coding standards in the project
 Never change what the code does, only how it does it. All original features, outputs, and behaviors must remain intact.
 
 ## Execution  
-1. Run `go vet ./..` and `go test ./..` first to confirm the current state passes
+1. Run `go vet ./...` and `go test ./...` first to confirm the current state passes
 2. Attempt to reproduce the original bug with new test cases - if you can, fix it.
 3. Write edge case tests that stress the implementation
 4. make any code quality improvements directly on this branch
-5. run `go vet ./..` and `go test ./..` again to verify nothing has broken
+5. run `go vet ./...` and `go test ./...` again to verify nothing has broken
 6. Commit with a message starting with `JRDEV: Review -` describing the refinements. 
 
 If the code is already clean, well-tested, and handles edge cases properly, do nothing.
