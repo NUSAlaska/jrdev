@@ -39,9 +39,33 @@ func (g GitOps) gitOutput(args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// gitWithSSHRecover runs git once; on SSH public-key auth failure it runs ssh-add interactively and retries once.
+func (g GitOps) gitWithSSHRecover(args ...string) error {
+	err := g.git(args...)
+	if err == nil {
+		return nil
+	}
+	if !looksLikeSSHAuthFailure(err.Error()) {
+		return err
+	}
+	recLog := g.Log
+	if recLog == nil {
+		recLog = func(string, ...any) {}
+	}
+	if rerr := trySSHInteractiveRecovery(recLog); rerr != nil {
+		return fmt.Errorf("%w\nssh recover: %v", err, rerr)
+	}
+	return g.git(args...)
+}
+
 // FetchOrigin updates remotes.
 func (g GitOps) FetchOrigin() error {
-	return g.git("fetch", "origin")
+	return g.gitWithSSHRecover("fetch", "origin")
+}
+
+// PushUpstream runs git push -u origin branch, with the same SSH recovery as FetchOrigin.
+func (g GitOps) PushUpstream(branch string) error {
+	return g.gitWithSSHRecover("push", "-u", "origin", branch)
 }
 
 // EnsureWorktreesRoot creates dir if missing.

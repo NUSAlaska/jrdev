@@ -10,7 +10,7 @@ import (
 const AgentSmokeExpectedToken = "JRDEV_PING_OK"
 
 // AgentSmokePrompt is hardcoded (not loaded from markdown templates).
-const AgentSmokePrompt = "Reply with exactly this single line and nothing else:\n" + AgentSmokeExpectedToken + "\nDo not read or modify any files or run shell commands."
+const AgentSmokePrompt = "Reply with exactly this single line and nothing else: " + AgentSmokeExpectedToken + " Do not read or modify any files or run shell commands."
 
 // ShouldRunAgentSmoke is false in dry-run (saves tokens).
 func ShouldRunAgentSmoke(cfg Config) bool {

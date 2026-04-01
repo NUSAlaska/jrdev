@@ -212,7 +212,7 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 
 		// Push integration branch for PR
 		vlog(cfg, log, "jrdev: verbose: git push -u origin %q\n", integrationBranch)
-		if err := git.git("push", "-u", "origin", integrationBranch); err != nil {
+		if err := git.PushUpstream(integrationBranch); err != nil {
 			log("jrdev: warning: git push integration: %v\n", err)
 		}
 
