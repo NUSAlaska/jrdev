@@ -26,6 +26,10 @@ type Config struct {
 	Verbose     bool
 	AgentBin    string
 	AgentModel  string // Cursor --model (default DefaultAgentModel)
-	GhBin       string
-	Integration string // rev for new integration branch, default "origin/main"
+	// AgentCursorConfigDir, if set, is passed as CURSOR_CONFIG_DIR (must contain cli-config.json). Mutually exclusive with AgentPermissionsFile.
+	AgentCursorConfigDir string
+	// AgentPermissionsFile is a JSON file with {"allow":["git","go",...],"deny":[]} (bare names become Shell(name)). Materialized to a temp cli-config.json per agent run.
+	AgentPermissionsFile string
+	GhBin                string
+	Integration          string // rev for new integration branch, default "origin/main"
 }

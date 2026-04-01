@@ -43,6 +43,8 @@ func run() int {
 	integrationBase := flag.String("integration-base", "origin/main", "rev to branch integration run from")
 	agentBin := flag.String("agent", "", "Cursor agent binary (default: agent on PATH)")
 	agentModel := flag.String("agent-model", jrdev.DefaultAgentModel, "Cursor agent --model name")
+	agentCursorDir := flag.String("agent-cursor-config-dir", "", "set CURSOR_CONFIG_DIR to this path (must contain cli-config.json); see Cursor CLI configuration docs")
+	agentPermissions := flag.String("agent-permissions", "", "JSON {\"allow\":[\"git\",\"go\"],\"deny\":[]}; bare entries become Shell(); if unset: use <repo>/.cursor/"+jrdev.ProjectCursorCLIConfigName+" when present, else "+jrdev.DefaultAgentPermissionsName+" next to the jrdev executable")
 	ghBin := flag.String("gh", "gh", "GitHub CLI binary")
 	var showHelp bool
 	flag.BoolVar(&showHelp, "help", false, "show usage and exit")
@@ -52,6 +54,11 @@ func run() int {
 	if showHelp {
 		usage(name, os.Stdout)
 		return 0
+	}
+
+	if *agentCursorDir != "" && *agentPermissions != "" {
+		fmt.Fprintf(os.Stderr, "jrdev: choose at most one of --agent-cursor-config-dir and --agent-permissions\n")
+		return 1
 	}
 
 	startDir, err := os.Getwd()
@@ -74,6 +81,19 @@ func run() int {
 		}
 	}
 
+	cursorDir := *agentCursorDir
+	permPath := *agentPermissions
+	if cursorDir == "" && permPath == "" {
+		if d, ok := jrdev.ProjectCursorConfigDir(repoRoot); ok {
+			cursorDir = d
+		} else if exe, xerr := os.Executable(); xerr == nil {
+			cand := filepath.Join(filepath.Dir(exe), jrdev.DefaultAgentPermissionsName)
+			if st, serr := os.Stat(cand); serr == nil && !st.IsDir() {
+				permPath = cand
+			}
+		}
+	}
+
 	prompts, err := loadPrompts()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "jrdev: prompts: %v\n", err)
@@ -81,17 +101,19 @@ func run() int {
 	}
 
 	cfg := jrdev.Config{
-		RepoRoot:    repoRoot,
-		Worktrees:   *worktrees,
-		Label:       *label,
-		DryRun:      *dryRun,
-		SkipPR:      *skipPR,
-		MaxIters:    *maxIter,
-		Verbose:     verbose,
-		AgentBin:    *agentBin,
-		AgentModel:  *agentModel,
-		GhBin:       *ghBin,
-		Integration: *integrationBase,
+		RepoRoot:             repoRoot,
+		Worktrees:            *worktrees,
+		Label:                *label,
+		DryRun:               *dryRun,
+		SkipPR:               *skipPR,
+		MaxIters:             *maxIter,
+		Verbose:              verbose,
+		AgentBin:             *agentBin,
+		AgentModel:           *agentModel,
+		AgentCursorConfigDir: cursorDir,
+		AgentPermissionsFile: permPath,
+		GhBin:                *ghBin,
+		Integration:          *integrationBase,
 	}
 
 	log := func(format string, args ...any) {
@@ -167,6 +189,8 @@ func usage(name string, w io.Writer) {
 		{"--integration-base rev", "Revision to branch integration runs from, default origin/main"},
 		{"--agent path", "Cursor agent binary; default is agent on PATH"},
 		{"--agent-model name", "Cursor agent --model; default " + jrdev.DefaultAgentModel},
+		{"--agent-permissions file", "Cursor permission JSON (jrdev format); if unset, uses <repo>/.cursor/" + jrdev.ProjectCursorCLIConfigName + " when present, else " + jrdev.DefaultAgentPermissionsName + " beside the binary"},
+		{"--agent-cursor-config-dir path", "CURSOR_CONFIG_DIR (must contain cli-config.json); mutually exclusive with --agent-permissions; overrides repo .cursor discovery"},
 		{"--gh path", "GitHub CLI binary, default gh"},
 		{"-h, -help", "Show this help and exit"},
 	}

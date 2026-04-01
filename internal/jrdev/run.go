@@ -18,6 +18,12 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 	}
 	vlog(cfg, log, "jrdev: verbose: agent=%q model=%q gh=%q worktrees=%q\n",
 		agentBin, cfg.AgentModel, cfg.GhBin, cfg.Worktrees)
+	switch {
+	case cfg.AgentCursorConfigDir != "":
+		vlog(cfg, log, "jrdev: verbose: agent CURSOR_CONFIG_DIR=%q (cli-config.json)\n", cfg.AgentCursorConfigDir)
+	case cfg.AgentPermissionsFile != "":
+		vlog(cfg, log, "jrdev: verbose: agent permissions file=%q (temp cli-config.json per agent run)\n", cfg.AgentPermissionsFile)
+	}
 
 	n, err := QueueOpenCount(cfg)
 	if err != nil {

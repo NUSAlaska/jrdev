@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 )
 
 // DefaultAgentModel is used when Config.AgentModel is empty.
@@ -52,6 +53,17 @@ func (r OSAgentRunner) Run(cfg Config, dir string, prompt string, opts AgentRunO
 	}
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = dir
+	extraEnv, envCleanup, err := PrepareAgentCursorEnv(cfg)
+	if err != nil {
+		return "", fmt.Errorf("agent cursor config: %w", err)
+	}
+	defer envCleanup()
+	if len(extraEnv) > 0 {
+		cmd.Env = append(slices.Clone(os.Environ()), extraEnv...)
+		if r.Log != nil {
+			r.Log("jrdev: verbose: agent CURSOR_CONFIG_DIR from jrdev permissions / --agent-cursor-config-dir\n")
+		}
+	}
 	if r.Log != nil {
 		if opts.Print {
 			r.Log("jrdev: verbose: agent cwd=%s\n", dir)
