@@ -140,3 +140,28 @@ func TestImplementPromptTemplate_rendersCheckFields(t *testing.T) {
 		t.Fatal(out)
 	}
 }
+
+func TestMergePromptTemplate_rendersIntegrationField(t *testing.T) {
+	body := "{{.IntegrationTests}}"
+	pc := ProjectConfig{ConfigReady: true, Integration: []string{"go test -count=1 ./..."}}
+	out, err := Render("merge", body, MergePromptData{
+		IntegrationTests: PromptIntegrationTests(pc),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "`go test -count=1 ./...`") {
+		t.Fatal(out)
+	}
+}
+
+func TestPromptLintTests_configReadyFalseAllEmptyUsesCategoryMessage(t *testing.T) {
+	p := ProjectConfig{ConfigReady: false}
+	got := PromptLintTests(p)
+	if got == noChecksConfiguredMessage {
+		t.Fatal("config_ready false should not use the all-empty ready message")
+	}
+	if !strings.Contains(got, "No `lint` checks") {
+		t.Fatal(got)
+	}
+}

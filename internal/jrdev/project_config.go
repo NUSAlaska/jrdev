@@ -22,7 +22,7 @@ type projectConfigDoc struct {
 	ConfigReady bool     `yaml:"config_ready"`
 	Lint        []string `yaml:"lint,omitempty"`
 	Unit        []string `yaml:"unit,omitempty"`
-	Integration []string       `yaml:"integration,omitempty"`
+	Integration []string `yaml:"integration,omitempty"`
 	Meta        map[string]any `yaml:"meta,omitempty"`
 }
 
