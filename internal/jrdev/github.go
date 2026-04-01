@@ -3,6 +3,7 @@ package jrdev
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os/exec"
 	"strings"
 )
@@ -37,6 +38,13 @@ func IssuesListJSON(cfg Config) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	meta, err := loadRepoWebMeta(cfg)
+	if err != nil {
+		return "", err
+	}
+	for i := range rows {
+		rows[i].Body = expandGitHubLinksInIssueBody(meta, rows[i].Body)
+	}
 	b, err := json.MarshalIndent(rows, "", "  ")
 	if err != nil {
 		return "", err
@@ -61,6 +69,8 @@ func listOpenIssues(cfg Config) ([]IssueRow, error) {
 }
 
 // IssueBody fetches body text for one issue (best-effort for implement prompt).
+// GitHub issue/PR shorthands and repo-relative markdown links are rewritten to absolute
+// https URLs so the agent can open them (same host as gh repo view).
 func IssueBody(cfg Config, number int) (string, error) {
 	out, err := ghCmd(cfg, "issue", "view", fmt.Sprintf("%d", number), "--json", "body").CombinedOutput()
 	if err != nil {
@@ -72,7 +82,36 @@ func IssueBody(cfg Config, number int) (string, error) {
 	if err := json.Unmarshal(out, &v); err != nil {
 		return "", err
 	}
-	return v.Body, nil
+	meta, err := loadRepoWebMeta(cfg)
+	if err != nil {
+		return "", fmt.Errorf("gh repo view (for issue link expansion): %w", err)
+	}
+	return expandGitHubLinksInIssueBody(meta, v.Body), nil
+}
+
+func loadRepoWebMeta(cfg Config) (*repoWebMeta, error) {
+	out, err := ghCmd(cfg, "repo", "view", "--json", "url").CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("gh repo view: %w\n%s", err, out)
+	}
+	var v struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(out, &v); err != nil {
+		return nil, fmt.Errorf("gh repo view json: %w", err)
+	}
+	if v.URL == "" {
+		return nil, fmt.Errorf("gh repo view: empty url")
+	}
+	u, err := url.Parse(v.URL)
+	if err != nil {
+		return nil, err
+	}
+	if u.Scheme == "" || u.Host == "" {
+		return nil, fmt.Errorf("gh repo view: invalid url %q", v.URL)
+	}
+	u.Path = strings.TrimSuffix(u.Path, "/")
+	return &repoWebMeta{base: u}, nil
 }
 
 // CloseIssue removes queue label and closes with comment (PRD: close when merged into integration).

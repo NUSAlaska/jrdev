@@ -15,6 +15,14 @@ You are in the **issue git worktree** on **`{{.IssueBranch}}`**. **jrdev** only 
 
 Integration branch (context): **`{{.IntegrationBranch}}`**
 
+### Issue body
+
+{{.IssueBody}}
+
+### Linked issues and PRDs (private GitHub)
+
+If the body links to other issues (e.g. a PRD) by URL, treat **private** repos like the **implement** phase: read them with **`gh issue view`** from the repo root, not unauthenticated HTTP/Cursor **WebFetch**, and ensure **`gh`** is allowed in agent permissions.
+
 ## Process
 
 1. Review diffs against the integration base semantics (branch was cut from integration tip).

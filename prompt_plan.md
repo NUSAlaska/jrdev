@@ -21,6 +21,8 @@ Use this list as the authoritative set of queued issues and their titles/bodies 
 {{.IssuesJSON}}
 ```
 
+**Private GitHub:** Issue bodies above may link to other issues (e.g. PRDs) by URL. Anything **not** in this JSON is still readable with **`gh issue view`** from the repo root (your **`gh auth`** session); generic HTTP or **WebFetch** will not work without auth. Use **`gh`** only when necessary; shell **`gh`** must be permitted in agent config if you run it.
+
 ## Process
 
 1. Build a **dependency graph** among **only** these labeled open issues.

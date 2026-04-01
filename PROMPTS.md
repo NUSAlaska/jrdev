@@ -19,7 +19,7 @@ Plain text; only the fields listed per file are substituted.
 |------------------------|--------|----------------------------------|
 | `{{.IssueNumber}}`     | int    | GitHub issue number               |
 | `{{.IssueTitle}}`      | string | Issue title                       |
-| `{{.IssueBody}}`       | string | Issue body text                   |
+| `{{.IssueBody}}`       | string | Issue body text (GitHub shorthands expanded to `https` URLs; agents on **private** repos should use **`gh issue view`** to load linked issues, not unauthenticated fetches) |
 | `{{.IssueBranch}}`     | string | Branch from planner (`agent-queue/issue-…`) |
 | `{{.IntegrationBranch}}` | string | Current integration branch name |
 | `{{.QueueLabel}}`      | string | Queue label                       |

@@ -26,6 +26,13 @@ You are in the **issue git worktree** on the issue branch named below. **jrdev**
 
 {{.IssueBody}}
 
+### Linked issues and PRDs (private GitHub)
+
+The body may include **full URLs** to other issues (for example a PRD). In **private** repositories, those pages are **not** readable via generic HTTP, **WebFetch**, or a browser without your GitHub session.
+
+- Use the **GitHub CLI** from the **repository root** (same context **jrdev** uses), e.g. **`gh issue view <number> --json title,body`** or **`gh issue view <paste-the-issue-url>`**.
+- Ensure Cursor **agent permissions** allow **`gh`** (e.g. **`"gh"`** in **`jrdev-agent-permissions.json`** / **`Shell(gh)`** in **`cli-config.json`**). Otherwise **`gh`** will be blocked in headless mode.
+
 ## Process
 
 1. Understand the issue and inspect the codebase in this worktree.
