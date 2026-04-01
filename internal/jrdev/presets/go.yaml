@@ -1,0 +1,10 @@
+meta:
+  id: go
+  title: Go
+  description: Go module with vet, tests, and a simple integration gate
+lint:
+  - go vet ./...
+unit:
+  - go test ./...
+integration:
+  - go test -count=1 ./...
