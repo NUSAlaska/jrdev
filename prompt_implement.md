@@ -53,6 +53,8 @@ Do not close the issue - this will be done later.
 
 Once complete, output COMPLETE.
 
+If no work is needed and you do not need to make any commits, output: COMPLETE NO COMMIT
+
 ## FINAL RULES
 
 ONLY WORK ON A SINGLE TASK.

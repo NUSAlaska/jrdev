@@ -3,6 +3,10 @@ package jrdev
 // AgentPhaseCompleteToken must appear in agent stdout before jrdev advances past implement, review, or merge.
 const AgentPhaseCompleteToken = "COMPLETE"
 
+// AgentImplementNoCommitToken must appear in implement-phase stdout when the issue is already satisfied
+// (e.g. completed while implementing another issue) so jrdev skips the "at least one commit" requirement.
+const AgentImplementNoCommitToken = "COMPLETE NO COMMIT"
+
 // CompletionMarker is a merge-phase convention; any output containing AgentPhaseCompleteToken satisfies validation.
 const CompletionMarker = "<promise>COMPLETE</promise>"
 

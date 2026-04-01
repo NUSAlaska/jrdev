@@ -213,7 +213,8 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 			}
 			return Render("implement", prompts.Implement, implData)
 		}
-		if _, err := runAgentUntilComplete(cfg, agent, log, "implement", issuePath, renderImplement); err != nil {
+		implOut, err := runAgentUntilComplete(cfg, agent, log, "implement", issuePath, renderImplement)
+		if err != nil {
 			return err
 		}
 		commits, err := CommitCountAhead(issuePath, baseSHA)
@@ -221,18 +222,29 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 			return err
 		}
 		vlog(cfg, log, "jrdev: verbose: commits ahead of base after implement: %d\n", commits)
-		if commits == 0 {
+		noCommitOK := strings.Contains(implOut, AgentImplementNoCommitToken)
+		if commits == 0 && noCommitOK {
+			vlog(cfg, log, "jrdev: verbose: implement output contained %q — not requiring commits\n", AgentImplementNoCommitToken)
+			log("jrdev: implement reported %q — continuing without commits on issue branch.\n", AgentImplementNoCommitToken)
+		}
+		if commits == 0 && !noCommitOK {
 			log("jrdev: zero commits after implement — retrying implement phase.\n")
-			if _, err := runAgentUntilComplete(cfg, agent, log, "implement", issuePath, renderImplement); err != nil {
+			implOut, err = runAgentUntilComplete(cfg, agent, log, "implement", issuePath, renderImplement)
+			if err != nil {
 				return err
 			}
 			commits, err = CommitCountAhead(issuePath, baseSHA)
 			if err != nil {
 				return err
 			}
+			noCommitOK = strings.Contains(implOut, AgentImplementNoCommitToken)
 			vlog(cfg, log, "jrdev: verbose: commits ahead after implement retry: %d\n", commits)
+			if commits == 0 && noCommitOK {
+				vlog(cfg, log, "jrdev: verbose: implement retry output contained %q — not requiring commits\n", AgentImplementNoCommitToken)
+				log("jrdev: implement reported %q — continuing without commits on issue branch.\n", AgentImplementNoCommitToken)
+			}
 		}
-		if commits == 0 {
+		if commits == 0 && !noCommitOK {
 			return fmt.Errorf("jrdev: issue #%d produced zero commits after retry — aborting (no merge, no gh close)", job.Number)
 		}
 
