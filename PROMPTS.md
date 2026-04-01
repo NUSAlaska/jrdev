@@ -53,6 +53,8 @@ Same fields as **implement** (`ImplementPromptData` / `ReviewPromptData`), inclu
 | `{{.UnitTests}}`        | string | Markdown: **unit** commands (same). |
 | `{{.IntegrationTests}}` | string | Markdown: **integration** commands from the repo config (primary check list for merge). |
 
+When merge output includes **`JRDEV_INTEGRATION_BLOCKED:`**, jrdev decides abort vs waive using **`--integration-blocked`**, **`meta.integration_blocked_action`**, or a TTY prompt—see **README.md** (“Integration blocked”).
+
 ## Not templated
 
 The preflight **agent smoke** prompt is hardcoded in `internal/jrdev/preflight.go` (`AgentSmokePrompt`).
