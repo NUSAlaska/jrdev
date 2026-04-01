@@ -95,7 +95,7 @@ func readLineBuf(br *bufio.Reader) (string, error) {
 	if err != nil && err != io.EOF {
 		return "", err
 	}
-	return strings.TrimSuffix(s, "\n"), nil
+	return strings.TrimRight(s, "\r\n"), nil
 }
 
 func resolvePresetChoice(line string, summaries []PresetSummary) (string, error) {

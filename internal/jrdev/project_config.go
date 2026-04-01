@@ -77,17 +77,22 @@ func WriteProjectConfig(path string, cfg ProjectConfig) error {
 }
 
 // SetProjectConfigReady reads path, sets config_ready, and writes YAML back.
+// It round-trips through a map so top-level keys outside [projectConfigDoc] survive
+// user edits between wizard seed and confirmation.
 func SetProjectConfigReady(path string, ready bool) error {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	var doc projectConfigDoc
-	if err := yaml.Unmarshal(b, &doc); err != nil {
+	var root map[string]any
+	if err := yaml.Unmarshal(b, &root); err != nil {
 		return fmt.Errorf("project config yaml: %w", err)
 	}
-	doc.ConfigReady = ready
-	out, err := yaml.Marshal(&doc)
+	if root == nil {
+		root = make(map[string]any)
+	}
+	root["config_ready"] = ready
+	out, err := yaml.Marshal(root)
 	if err != nil {
 		return fmt.Errorf("project config yaml encode: %w", err)
 	}

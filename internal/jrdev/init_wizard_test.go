@@ -2,10 +2,12 @@ package jrdev
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 func TestRunInitWizard_selectByNumber_seedsPresetAndSetsReady(t *testing.T) {
@@ -65,6 +67,39 @@ func TestResolvePresetChoice_invalid(t *testing.T) {
 	_, err := resolvePresetChoice("99", []PresetSummary{{ID: "a", Title: "A"}})
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestRunInitWizard_noPresets(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "config.yaml")
+	err := RunInitWizard(cfg, fstest.MapFS{}, InitWizardIO{
+		In:     strings.NewReader("1\n"),
+		Out:    io.Discard,
+		ErrOut: io.Discard,
+	})
+	if err == nil || !strings.Contains(err.Error(), "no presets") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestRunInitWizard_crlfFirstLine(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.yaml")
+	presets, err := EmbeddedPresetsFS()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	in := bytes.NewBufferString("go\r\n\n")
+	if err := RunInitWizard(cfg, presets, InitWizardIO{In: in, Out: &out, ErrOut: io.Discard}); err != nil {
+		t.Fatal(err)
+	}
+	pc, err := LoadProjectConfig(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pc.Meta["source_preset"] != "go" {
+		t.Fatal(pc.Meta)
 	}
 }
 

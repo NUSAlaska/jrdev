@@ -208,3 +208,36 @@ func TestParseProjectConfigYAML(t *testing.T) {
 		t.Fatalf("%#v", c)
 	}
 }
+
+func TestSetProjectConfigReady_preservesExtraTopLevelKey(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "cfg.yaml")
+	const raw = `config_ready: false
+lint:
+  - go vet ./...
+notes: keep me
+`
+	if err := os.WriteFile(p, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetProjectConfigReady(p, true); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(got)
+	if !strings.Contains(s, "notes:") || !strings.Contains(s, "keep me") {
+		t.Fatalf("lost extra key:\n%s", s)
+	}
+	pc, err := LoadProjectConfig(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !pc.ConfigReady {
+		t.Fatal("expected ready")
+	}
+	if len(pc.Lint) != 1 || pc.Lint[0] != "go vet ./..." {
+		t.Fatalf("lint %#v", pc.Lint)
+	}
+}
