@@ -37,6 +37,9 @@ func TestValidateMergeAgentOutput(t *testing.T) {
 	if err := ValidateMergeAgentOutput("ok\n" + CompletionMarker + "\n"); err != nil {
 		t.Fatal(err)
 	}
+	if err := ValidateMergeAgentOutput("done: COMPLETE\n"); err != nil {
+		t.Fatal(err)
+	}
 	if err := ValidateMergeAgentOutput("no marker here"); err == nil {
 		t.Fatal("expected error")
 	}

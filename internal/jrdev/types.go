@@ -1,6 +1,9 @@
 package jrdev
 
-// CompletionMarker appears in merge-phase output when merge, checks, and GitHub steps succeed.
+// AgentPhaseCompleteToken must appear in agent stdout before jrdev advances past implement, review, or merge.
+const AgentPhaseCompleteToken = "COMPLETE"
+
+// CompletionMarker is a merge-phase convention; any output containing AgentPhaseCompleteToken satisfies validation.
 const CompletionMarker = "<promise>COMPLETE</promise>"
 
 // PlannedIssue is one row from planner JSON inside <plan>.

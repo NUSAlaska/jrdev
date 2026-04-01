@@ -165,7 +165,7 @@ After `go install .`, replace `go run .` with **`jrdev`** (or **`jrdev.exe`**) o
 1. **N** = count of open issues with the queue label; if **N == 0**, exit cleanly.
 2. **Preflight** (once): `git` on PATH and `git version`, `gh auth status`, **`agent`** resolved and able to run `-h` / `--help`; unless `--dry-run`, a minimal **`agent -p`** smoke that must print a fixed token (that prompt forbids shell commands and file edits). Agent invocations use the [permission / `CURSOR_CONFIG_DIR`](#cursor-agent-cli-permissions--p--headless) rules above.
 3. Creates **`agent-queue/run-<timestamp>`** and a worktree under **`--worktrees`** from **`--integration-base`**.
-4. Each **cycle**: plan (in integration worktree) → parse `<plan>…</plan>` JSON → **one** issue (first row) → issue worktree from integration tip → implement (retry once on zero commits) → review if commits → merge phase → **`go vet ./...`** and **`go test ./...`** on integration → **`gh issue close`** and remove label → push integration branch.
+4. Each **cycle**: plan (in integration worktree) → parse `<plan>…</plan>` JSON → **one** issue (first row) → issue worktree from integration tip → **implement**, **review** (if there are commits), and **merge** agent phases each loop until stdout contains **`COMPLETE`**, re-rendering the prompt with fresh git history/diff on every attempt (cap: 25 tries per phase); if implement produces zero commits, that phase runs again once the same way → **`go vet ./...`** and **`go test ./...`** on integration → **`gh issue close`** and remove label → push integration branch.
 5. Stops when the plan returns **`issues: []`**, or **max iterations** is reached, then **`gh pr create`** to **`main`** unless **`--skip-pr`**.
 
 `main` is never merged by the tool directly; landing on `main` is via PR only.
@@ -173,6 +173,7 @@ After `go install .`, replace `go run .` with **`jrdev`** (or **`jrdev.exe`**) o
 ## Failure and recovery
 
 - **Zero commits after implement retry**: run aborts; issue is not closed; integration branch and worktrees remain under `.worktrees/` for inspection.
+- **Agent phase never prints `COMPLETE`** (after 25 attempts on implement, review, or merge): run aborts with an error; prompts should instruct the model to include `COMPLETE` when the phase is finished.
 - **Merge / `go vet` / `go test` failure**: fix locally in the integration or issue worktree, or remove worktrees/branches manually.
 - **SSH auth to `origin`**: ensure `ssh-add` / agent (or HTTPS) works; see **Network / auth** above. **Non-interactive** environments cannot complete interactive `ssh-add` recovery.
 - **Agent smoke or plan/implement errors about blocked tools**: configure **[Cursor agent CLI permissions](#cursor-agent-cli-permissions--p--headless)** (`repo/.cursor/cli-config.json`, `jrdev-agent-permissions.json`, or flags).

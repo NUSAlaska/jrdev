@@ -236,6 +236,27 @@ func BranchMergedIntoHead(workDir, branch string) (bool, error) {
 	return false, err
 }
 
+// CommitHistoryForPrompt returns the last 10 commits as plain text for prompt templates
+// (same as: git log -n 10 --format="%H%n%ad%n%B---" --date=short).
+func CommitHistoryForPrompt(workDir string) (string, error) {
+	c := exec.Command("git", "-C", workDir, "log", "-n", "10", `--format=%H%n%ad%n%B---`, "--date=short")
+	out, err := c.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git log (prompt commit history): %w\n%s", err, out)
+	}
+	return string(out), nil
+}
+
+// GitDiffForPrompt returns git diff main..HEAD text for prompt templates.
+func GitDiffForPrompt(workDir string) (string, error) {
+	c := exec.Command("git", "-C", workDir, "diff", "main..HEAD")
+	out, err := c.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git diff main..HEAD (prompt): %w\n%s", err, out)
+	}
+	return string(out), nil
+}
+
 // MergeBranchInDir runs git merge branch --no-edit in workDir.
 func MergeBranchInDir(workDir, branch string) error {
 	c := exec.Command("git", "-C", workDir, "merge", branch, "--no-edit")

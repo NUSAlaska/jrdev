@@ -3,7 +3,10 @@ package jrdev
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 )
+
+const maxAgentStepAttempts = 25
 
 // Run executes the full agent-queue loop after preflight.
 func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, ...any)) error {
@@ -84,9 +87,19 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 			return err
 		}
 		vlog(cfg, log, "jrdev: verbose: gh issue list JSON for planner: %d bytes\n", len(issuesJSON))
+		planHist, err := CommitHistoryForPrompt(intPath)
+		if err != nil {
+			return err
+		}
+		planDiff, err := GitDiffForPrompt(intPath)
+		if err != nil {
+			return err
+		}
 		planBody, err := Render("plan", prompts.Plan, PlanPromptData{
-			QueueLabel: cfg.Label,
-			IssuesJSON: issuesJSON,
+			QueueLabel:    cfg.Label,
+			IssuesJSON:    issuesJSON,
+			CommitHistory: planHist,
+			GitDiff:       planDiff,
 		})
 		if err != nil {
 			return err
@@ -147,13 +160,20 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 			IntegrationBranch: integrationBranch,
 			QueueLabel:        cfg.Label,
 		}
-		implBody, err := Render("implement", prompts.Implement, implData)
-		if err != nil {
-			return err
+		renderImplement := func() (string, error) {
+			var err error
+			implData.CommitHistory, err = CommitHistoryForPrompt(issuePath)
+			if err != nil {
+				return "", err
+			}
+			implData.GitDiff, err = GitDiffForPrompt(issuePath)
+			if err != nil {
+				return "", err
+			}
+			return Render("implement", prompts.Implement, implData)
 		}
-		vlog(cfg, log, "jrdev: verbose: implement phase — prompt %d bytes\n", len(implBody))
-		if _, err := agent.Run(cfg, issuePath, implBody, AgentRunOptions{Print: true}); err != nil {
-			return fmt.Errorf("implement: %w", err)
+		if _, err := runAgentUntilComplete(cfg, agent, log, "implement", issuePath, renderImplement); err != nil {
+			return err
 		}
 		commits, err := CommitCountAhead(issuePath, baseSHA)
 		if err != nil {
@@ -161,9 +181,9 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 		}
 		vlog(cfg, log, "jrdev: verbose: commits ahead of base after implement: %d\n", commits)
 		if commits == 0 {
-			log("jrdev: zero commits after implement — retrying once.\n")
-			if _, err := agent.Run(cfg, issuePath, implBody, AgentRunOptions{Print: true}); err != nil {
-				return fmt.Errorf("implement retry: %w", err)
+			log("jrdev: zero commits after implement — retrying implement phase.\n")
+			if _, err := runAgentUntilComplete(cfg, agent, log, "implement", issuePath, renderImplement); err != nil {
+				return err
 			}
 			commits, err = CommitCountAhead(issuePath, baseSHA)
 			if err != nil {
@@ -176,41 +196,44 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 		}
 
 		if commits > 0 {
-			revBody, err := Render("review", prompts.Review, implData)
-			if err != nil {
-				return err
+			renderReview := func() (string, error) {
+				var err error
+				implData.CommitHistory, err = CommitHistoryForPrompt(issuePath)
+				if err != nil {
+					return "", err
+				}
+				implData.GitDiff, err = GitDiffForPrompt(issuePath)
+				if err != nil {
+					return "", err
+				}
+				return Render("review", prompts.Review, implData)
 			}
-			vlog(cfg, log, "jrdev: verbose: review phase — prompt %d bytes\n", len(revBody))
-			if _, err := agent.Run(cfg, issuePath, revBody, AgentRunOptions{Print: true}); err != nil {
-				return fmt.Errorf("review: %w", err)
+			if _, err := runAgentUntilComplete(cfg, agent, log, "review", issuePath, renderReview); err != nil {
+				return err
 			}
 		}
 
-		mergeBody, err := Render("merge", prompts.Merge, MergePromptData{
+		mergeData := MergePromptData{
 			IssueNumber:       job.Number,
 			IssueTitle:        job.Title,
 			IssueBranch:       job.Branch,
 			IntegrationBranch: integrationBranch,
 			QueueLabel:        cfg.Label,
-		})
-		if err != nil {
-			return err
 		}
-		vlog(cfg, log, "jrdev: verbose: merge phase (agent) — prompt %d bytes (integration worktree=%s)\n", len(mergeBody), intPath)
-		mergeOut, err := agent.Run(cfg, intPath, mergeBody, AgentRunOptions{Print: true})
-		if err != nil {
-			return fmt.Errorf("merge phase: %w", err)
-		}
-		if err := ValidateMergeAgentOutput(mergeOut); err != nil {
-			vlog(cfg, log, "jrdev: verbose: merge phase output validation failed; retrying once with correction\n")
-			retryMerge := AppendAgentOutputRetryInstructions(mergeBody, "Merge phase", err, mergeOut)
-			mergeOut, err = agent.Run(cfg, intPath, retryMerge, AgentRunOptions{Print: true})
+		renderMerge := func() (string, error) {
+			var err error
+			mergeData.CommitHistory, err = CommitHistoryForPrompt(intPath)
 			if err != nil {
-				return fmt.Errorf("merge phase retry: %w", err)
+				return "", err
 			}
-			if err := ValidateMergeAgentOutput(mergeOut); err != nil {
-				return err
+			mergeData.GitDiff, err = GitDiffForPrompt(intPath)
+			if err != nil {
+				return "", err
 			}
+			return Render("merge", prompts.Merge, mergeData)
+		}
+		if _, err := runAgentUntilComplete(cfg, agent, log, "merge", intPath, renderMerge); err != nil {
+			return fmt.Errorf("merge phase: %w", err)
 		}
 		merged, err := BranchMergedIntoHead(intPath, job.Branch)
 		if err != nil {
@@ -264,4 +287,29 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 	}
 
 	return nil
+}
+
+// runAgentUntilComplete invokes agent.Run with a fresh prompt from render on each attempt until stdout
+// contains AgentPhaseCompleteToken or maxAgentStepAttempts is reached.
+func runAgentUntilComplete(cfg Config, agent AgentRunner, log func(string, ...any), phase, workDir string, render func() (string, error)) (string, error) {
+	var lastOut string
+	for attempt := 1; attempt <= maxAgentStepAttempts; attempt++ {
+		body, err := render()
+		if err != nil {
+			return "", err
+		}
+		vlog(cfg, log, "jrdev: verbose: %s — attempt %d/%d, prompt %d bytes\n", phase, attempt, maxAgentStepAttempts, len(body))
+		out, err := agent.Run(cfg, workDir, body, AgentRunOptions{Print: true})
+		lastOut = out
+		if err != nil {
+			return out, fmt.Errorf("%s: %w", phase, err)
+		}
+		if strings.Contains(out, AgentPhaseCompleteToken) {
+			vlog(cfg, log, "jrdev: verbose: %s — saw %q in output (%d bytes)\n", phase, AgentPhaseCompleteToken, len(out))
+			return out, nil
+		}
+		vlog(cfg, log, "jrdev: verbose: %s — output missing %q (%d bytes); retrying\n", phase, AgentPhaseCompleteToken, len(out))
+	}
+	return lastOut, fmt.Errorf("jrdev: %s: output never contained %q after %d attempts (last output %d bytes)",
+		phase, AgentPhaseCompleteToken, maxAgentStepAttempts, len(lastOut))
 }

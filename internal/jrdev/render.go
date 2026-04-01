@@ -8,18 +8,22 @@ import (
 
 // PlanPromptData is passed to the plan markdown template.
 type PlanPromptData struct {
-	QueueLabel string
-	IssuesJSON string // preloaded gh issue list JSON
+	QueueLabel    string
+	IssuesJSON    string // preloaded gh issue list JSON
+	CommitHistory string // git log snippet for agent cwd (integration worktree)
+	GitDiff       string // git diff main..HEAD in agent cwd
 }
 
 // ImplementPromptData is passed to the implement template.
 type ImplementPromptData struct {
-	IssueNumber        int
-	IssueTitle         string
-	IssueBody          string
-	IssueBranch        string
-	IntegrationBranch  string
-	QueueLabel         string
+	IssueNumber       int
+	IssueTitle        string
+	IssueBody         string
+	IssueBranch       string
+	IntegrationBranch string
+	QueueLabel        string
+	CommitHistory     string // git log snippet for agent cwd (issue worktree)
+	GitDiff           string // git diff main..HEAD in agent cwd
 }
 
 // ReviewPromptData is passed to the review template.
@@ -32,6 +36,8 @@ type MergePromptData struct {
 	IssueBranch       string
 	IntegrationBranch string
 	QueueLabel        string
+	CommitHistory     string // git log snippet for agent cwd (integration worktree)
+	GitDiff           string // git diff main..HEAD in agent cwd
 }
 
 // Render treats body as a Go text/template with the given name for errors.

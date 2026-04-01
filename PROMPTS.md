@@ -6,12 +6,18 @@ Templates are `text/template` files embedded in the binary. Placeholders must ma
 
 Plain text; only the fields listed per file are substituted.
 
+## Agent phase completion (implement, review, merge)
+
+For **implement**, **review**, and **merge**, jrdev runs the Cursor agent in a loop. On **each** attempt it re-reads git state and re-renders the prompt (fresh `{{.CommitHistory}}` and `{{.GitDiff}}`). It advances to the next pipeline step only when the agent’s stdout contains the substring **`COMPLETE`** (same check as `AgentPhaseCompleteToken` in `internal/jrdev/types.go`), up to **25** attempts per phase. **Plan** is not subject to this loop.
+
 ## `prompt_plan.md` — `PlanPromptData`
 
 | Placeholder     | Type   | Meaning                                                |
 |----------------|--------|--------------------------------------------------------|
 | `{{.QueueLabel}}` | string | GitHub label for the queue (e.g. `agent-queue`) |
 | `{{.IssuesJSON}}` | string | Pretty-printed JSON array of open queued issues (`gh` preloaded). |
+| `{{.CommitHistory}}` | string | Last 10 commits from the **integration** worktree (`git log -n 10 --format="%H%n%ad%n%B---" --date=short`). |
+| `{{.GitDiff}}` | string | `git diff main..HEAD` in the **integration** worktree. |
 
 ## `prompt_implement.md` — `ImplementPromptData`
 
@@ -23,10 +29,12 @@ Plain text; only the fields listed per file are substituted.
 | `{{.IssueBranch}}`     | string | Branch from planner (`agent-queue/issue-…`) |
 | `{{.IntegrationBranch}}` | string | Current integration branch name |
 | `{{.QueueLabel}}`      | string | Queue label                       |
+| `{{.CommitHistory}}`   | string | Last 10 commits from the **issue** worktree (same `git log` format as plan). |
+| `{{.GitDiff}}`         | string | `git diff main..HEAD` in the **issue** worktree (refreshed before **each** implement attempt). |
 
 ## `prompt_review.md`
 
-Same fields as **implement** (`ImplementPromptData` / `ReviewPromptData`).
+Same fields as **implement** (`ImplementPromptData` / `ReviewPromptData`). **`{{.CommitHistory}}` and `{{.GitDiff}}` are refreshed before each review attempt** (after implement commits exist).
 
 ## `prompt_merge.md` — `MergePromptData`
 
@@ -37,6 +45,8 @@ Same fields as **implement** (`ImplementPromptData` / `ReviewPromptData`).
 | `{{.IssueBranch}}`      | string | Issue branch to merge       |
 | `{{.IntegrationBranch}}`| string | Integration branch (merge target) |
 | `{{.QueueLabel}}`       | string | Label `gh issue edit --remove-label` refers to |
+| `{{.CommitHistory}}`    | string | Last 10 commits from the **integration** worktree (same `git log` format as plan). |
+| `{{.GitDiff}}`          | string | `git diff main..HEAD` in the **integration** worktree. |
 
 ## Not templated
 

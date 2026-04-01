@@ -4,9 +4,83 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
+
+func TestCommitHistoryForPrompt(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	tmp := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", args...)
+		c.Dir = tmp
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	runGit("init", "-b", "main")
+	_ = exec.Command("git", "-C", tmp, "config", "user.email", "t@t").Run()
+	_ = exec.Command("git", "-C", tmp, "config", "user.name", "t").Run()
+	if err := os.WriteFile(filepath.Join(tmp, "f"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit("add", "f")
+	runGit("commit", "-m", "first subject\n\nbody line")
+
+	s, err := CommitHistoryForPrompt(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(s, "---") {
+		t.Fatalf("expected commit separator in output: %q", s)
+	}
+	if !regexp.MustCompile(`^[0-9a-f]{40}\n[0-9]{4}-[0-9]{2}-[0-9]{2}\n`).MatchString(s) {
+		t.Fatalf("expected hash then short date then newline: %q", s)
+	}
+	if !strings.Contains(s, "first subject") {
+		t.Fatalf("expected message body: %q", s)
+	}
+}
+
+func TestGitDiffForPrompt(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	tmp := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", args...)
+		c.Dir = tmp
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	runGit("init", "-b", "main")
+	_ = exec.Command("git", "-C", tmp, "config", "user.email", "t@t").Run()
+	_ = exec.Command("git", "-C", tmp, "config", "user.name", "t").Run()
+	if err := os.WriteFile(filepath.Join(tmp, "f"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit("add", "f")
+	runGit("commit", "-m", "on main")
+	runGit("checkout", "-b", "feature")
+	if err := os.WriteFile(filepath.Join(tmp, "f"), []byte("b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit("commit", "-am", "on feature")
+
+	s, err := GitDiffForPrompt(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(s, "diff --git") || !strings.Contains(s, "-a") || !strings.Contains(s, "+b") {
+		t.Fatalf("expected unified diff with change a->b: %q", s)
+	}
+}
 
 func TestBranchMergedIntoHead(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {

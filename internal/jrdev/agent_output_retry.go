@@ -31,10 +31,10 @@ func AppendAgentOutputRetryInstructions(basePrompt, phaseTitle string, valErr er
 	return sb.String()
 }
 
-// ValidateMergeAgentOutput checks merge-phase stdout for the completion marker.
+// ValidateMergeAgentOutput checks merge-phase stdout for AgentPhaseCompleteToken.
 func ValidateMergeAgentOutput(agentStdout string) error {
-	if strings.Contains(agentStdout, CompletionMarker) {
+	if strings.Contains(agentStdout, AgentPhaseCompleteToken) {
 		return nil
 	}
-	return fmt.Errorf("merge phase: output missing completion marker %q (required when merge and tests succeeded)", CompletionMarker)
+	return fmt.Errorf("merge phase: output missing required substring %q", AgentPhaseCompleteToken)
 }
