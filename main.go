@@ -21,9 +21,17 @@ func main() {
 	os.Exit(run())
 }
 
+const jrdevInitHint = "Run `jrdev init` in an interactive terminal to create or finish repository setup."
+
 func run() int {
 	name := programName()
-	if len(os.Args) > 1 && (os.Args[1] == "help" || os.Args[1] == "-help" || os.Args[1] == "--help") {
+	args := os.Args[1:]
+	sub := "run"
+	if len(args) > 0 && args[0] == "init" {
+		sub = "init"
+		args = args[1:]
+	}
+	if len(args) > 0 && (args[0] == "help" || args[0] == "-help" || args[0] == "--help") {
 		usage(name, os.Stdout)
 		return 0
 	}
@@ -52,7 +60,7 @@ func run() int {
 	flag.BoolVar(&showHelp, "help", false, "show usage and exit")
 	flag.BoolVar(&showHelp, "h", false, "show usage and exit (shorthand)")
 
-	flag.Parse()
+	flag.CommandLine.Parse(args)
 	if showHelp {
 		usage(name, os.Stdout)
 		return 0
@@ -107,18 +115,76 @@ func run() int {
 			return 1
 		}
 	}
+
+	runSetupWizard := func() error {
+		presets, err := jrdev.EmbeddedPresetsFS()
+		if err != nil {
+			return err
+		}
+		wio := jrdev.InitWizardIO{In: os.Stdin, Out: os.Stdout, ErrOut: os.Stderr}
+		return jrdev.RunInitWizard(cfgYAML, presets, wio)
+	}
+
+	if sub == "init" {
+		if !jrdev.StdinIsTTY(int(os.Stdin.Fd())) {
+			fmt.Fprintf(os.Stderr, "jrdev init requires an interactive terminal.\n")
+			return 1
+		}
+		if _, err := os.Stat(cfgYAML); err == nil {
+			if pc, lerr := jrdev.LoadProjectConfig(cfgYAML); lerr == nil && pc.ConfigReady {
+				fmt.Fprintf(os.Stdout, "jrdev: %s already has config_ready: true; nothing to do.\n", cfgYAML)
+				return 0
+			}
+		}
+		if err := runSetupWizard(); err != nil {
+			fmt.Fprintf(os.Stderr, "jrdev init: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+
+	tty := jrdev.StdinIsTTY(int(os.Stdin.Fd()))
 	projectCfg, err := jrdev.LoadProjectConfig(cfgYAML)
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "jrdev: repository config not found at %s\n"+
-				"Create .jrdev/config.yaml with config_ready: true and optional lint, unit, and integration command lists (see parent PRD).\n", cfgYAML)
-		} else {
-			fmt.Fprintf(os.Stderr, "jrdev: config: %v\n", err)
+			if tty {
+				if err := runSetupWizard(); err != nil {
+					fmt.Fprintf(os.Stderr, "jrdev: %v\n", err)
+					return 1
+				}
+				projectCfg, err = jrdev.LoadProjectConfig(cfgYAML)
+			} else {
+				if err := jrdev.WriteNonInteractiveStubConfig(cfgYAML); err != nil {
+					fmt.Fprintf(os.Stderr, "jrdev: write stub config: %v\n", err)
+					return 1
+				}
+				fmt.Fprintf(os.Stderr, "jrdev: repository config not found — wrote stub at %s\n%s\n", cfgYAML, jrdevInitHint)
+				return 1
+			}
 		}
-		return 1
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "jrdev: config: %v\n", err)
+			return 1
+		}
 	}
 	if !projectCfg.ConfigReady {
-		fmt.Fprintf(os.Stderr, "jrdev: config_ready is false in %s — set config_ready: true when this repository is prepared for the agent pipeline.\n", cfgYAML)
+		if tty {
+			if err := runSetupWizard(); err != nil {
+				fmt.Fprintf(os.Stderr, "jrdev: %v\n", err)
+				return 1
+			}
+			projectCfg, err = jrdev.LoadProjectConfig(cfgYAML)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "jrdev: config: %v\n", err)
+				return 1
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "jrdev: config_ready is false in %s — finish setup before running the pipeline.\n%s\n", cfgYAML, jrdevInitHint)
+			return 1
+		}
+	}
+	if !projectCfg.ConfigReady {
+		fmt.Fprintf(os.Stderr, "jrdev: config_ready is still false in %s after setup.\n%s\n", cfgYAML, jrdevInitHint)
 		return 1
 	}
 
@@ -202,6 +268,7 @@ func usage(name string, w io.Writer) {
 	fmt.Fprintf(&b, "jrdev — plan → implement → review → merge loop for GitHub issues with a queue label.\n\n")
 	fmt.Fprintf(&b, "Syntax:\n")
 	fmt.Fprintf(&b, "  %s [flags]\n", name)
+	fmt.Fprintf(&b, "  %s init [flags]   interactive setup wizard for .jrdev/config.yaml\n", name)
 	fmt.Fprintf(&b, "  %s help\n", name)
 	fmt.Fprintf(&b, "  %s -h | -help | --help\n\n", name)
 	fmt.Fprintf(&b, "Typical calls:\n")

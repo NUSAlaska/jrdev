@@ -165,3 +165,46 @@ func TestPromptLintTests_configReadyFalseAllEmptyUsesCategoryMessage(t *testing.
 		t.Fatal(got)
 	}
 }
+
+func TestWriteProjectConfig_roundTrip(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "c.yaml")
+	cfg := ProjectConfig{
+		ConfigReady: false,
+		Lint:        []string{"x"},
+		Meta:        map[string]any{"source_preset": "go"},
+	}
+	if err := WriteProjectConfig(p, cfg); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadProjectConfig(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ConfigReady || len(got.Lint) != 1 || got.Lint[0] != "x" {
+		t.Fatalf("%#v", got)
+	}
+	if got.Meta["source_preset"] != "go" {
+		t.Fatal(got.Meta)
+	}
+	if err := SetProjectConfigReady(p, true); err != nil {
+		t.Fatal(err)
+	}
+	got, err = LoadProjectConfig(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.ConfigReady {
+		t.Fatal("ready")
+	}
+}
+
+func TestParseProjectConfigYAML(t *testing.T) {
+	const raw = "config_ready: true\nlint:\n  - a\n"
+	c, err := ParseProjectConfigYAML([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.ConfigReady || len(c.Lint) != 1 {
+		t.Fatalf("%#v", c)
+	}
+}

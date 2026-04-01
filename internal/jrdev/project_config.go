@@ -3,6 +3,7 @@ package jrdev
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -35,6 +36,11 @@ func LoadProjectConfig(path string) (ProjectConfig, error) {
 	if err != nil {
 		return ProjectConfig{}, err
 	}
+	return ParseProjectConfigYAML(b)
+}
+
+// ParseProjectConfigYAML parses YAML bytes into [ProjectConfig].
+func ParseProjectConfigYAML(b []byte) (ProjectConfig, error) {
 	var doc projectConfigDoc
 	if err := yaml.Unmarshal(b, &doc); err != nil {
 		return ProjectConfig{}, fmt.Errorf("project config yaml: %w", err)
@@ -46,6 +52,63 @@ func LoadProjectConfig(path string) (ProjectConfig, error) {
 		Integration: doc.Integration,
 		Meta:        doc.Meta,
 	}, nil
+}
+
+// WriteProjectConfig writes cfg to path as YAML, creating parent directories.
+func WriteProjectConfig(path string, cfg ProjectConfig) error {
+	doc := projectConfigDoc{
+		ConfigReady: cfg.ConfigReady,
+		Lint:        cfg.Lint,
+		Unit:        cfg.Unit,
+		Integration: cfg.Integration,
+		Meta:        cfg.Meta,
+	}
+	if len(doc.Meta) == 0 {
+		doc.Meta = nil
+	}
+	b, err := yaml.Marshal(&doc)
+	if err != nil {
+		return fmt.Errorf("project config yaml encode: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0o644)
+}
+
+// SetProjectConfigReady reads path, sets config_ready, and writes YAML back.
+func SetProjectConfigReady(path string, ready bool) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var doc projectConfigDoc
+	if err := yaml.Unmarshal(b, &doc); err != nil {
+		return fmt.Errorf("project config yaml: %w", err)
+	}
+	doc.ConfigReady = ready
+	out, err := yaml.Marshal(&doc)
+	if err != nil {
+		return fmt.Errorf("project config yaml encode: %w", err)
+	}
+	return os.WriteFile(path, out, 0o644)
+}
+
+const nonInteractiveStubYAML = `# jrdev repository pipeline config (stub; not ready)
+# Set config_ready to true after you add lint, unit, and integration commands below,
+# or run jrdev init in an interactive terminal for the setup wizard.
+config_ready: false
+lint: []
+unit: []
+integration: []
+`
+
+// WriteNonInteractiveStubConfig writes a minimal stub without optional meta defaults.
+func WriteNonInteractiveStubConfig(path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(nonInteractiveStubYAML), 0o644)
 }
 
 func (p ProjectConfig) allCheckListsEmpty() bool {
