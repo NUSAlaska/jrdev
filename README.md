@@ -183,14 +183,14 @@ Every Cursor **`agent`** invocation **`jrdev`** launches (preflight smoke, plan,
 
 | Path | Contents |
 |------|----------|
-| **`.jrdev/agent-runs/<timestamp>-<pid>/prompt.txt`** | Exact prompt text passed to the agent (via `-p` pointing at this path, relative to that cwd). |
-| **`.jrdev/agent-runs/<timestamp>-<pid>/output.txt`** | Everything the agent process printed (success or failure). |
+| **`.jrdev/agent-runs/<timestamp>-<pid>/prompt.md`** | Exact prompt text passed to the agent (via `-p` pointing at this path, relative to that cwd). |
+| **`.jrdev/agent-runs/<timestamp>-<pid>/output.md`** | Everything the agent process printed (success or failure). |
 
 The first time artifacts are written in a given worktree, **`jrdev`** creates **`.jrdev/.gitignore`** so **`agent-runs/`** is ignored by Git in that tree. If your **`--worktrees`** directory is already gitignored (recommended), those paths usually stay hidden from **`git status`** entirely.
 
 If you run preflight from the **repo root** and **`--worktrees`** is not under an ignored path, consider adding **`.jrdev/`** to your **repository root** `.gitignore` so local transcripts (and the nested `.gitignore`) never clutter **`git status`**.
 
-With **`-v` / `--verbose`**, logs include the artifact directory for each agent run—useful to open the matching **`prompt.txt`** and **`output.txt`** after a failure.
+With **`-v` / `--verbose`**, logs include the artifact directory for each agent run—useful to open the matching **`prompt.md`** and **`output.md`** after a failure.
 
 ## Failure and recovery
 

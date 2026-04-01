@@ -8,15 +8,15 @@ import (
 )
 
 func TestShortPromptForRelFile_mentionsPath(t *testing.T) {
-	s := shortPromptForRelFile(".jrdev/agent-runs/1/prompt.txt")
-	if !strings.Contains(s, ".jrdev/agent-runs/1/prompt.txt") {
+	s := shortPromptForRelFile(".jrdev/agent-runs/1/prompt.md")
+	if !strings.Contains(s, ".jrdev/agent-runs/1/prompt.md") {
 		t.Fatalf("expected relative path in meta-prompt: %q", s)
 	}
 }
 
 func TestWriteTextFile_roundTrip(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "prompt.txt")
+	path := filepath.Join(dir, "prompt.md")
 	content := "hello\nworld"
 	if err := writeTextFile(path, content); err != nil {
 		t.Fatal(err)

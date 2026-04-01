@@ -17,6 +17,11 @@ const DefaultAgentModel = "composer-2-fast"
 // AgentArtifactsDir is the per-worktree root for saved prompts and agent output.
 const AgentArtifactsDir = ".jrdev"
 
+const (
+	agentArtifactPromptFilename = "prompt.md"
+	agentArtifactOutputFilename = "output.md"
+)
+
 const agentRunsSubdir = "agent-runs"
 
 const agentNestedGitignore = "# jrdev: local agent prompts and transcripts (do not commit)\n" + agentRunsSubdir + "/\n"
@@ -50,7 +55,7 @@ func (r OSAgentRunner) Run(cfg Config, dir string, prompt string, opts AgentRunO
 	if err != nil {
 		return "", fmt.Errorf("agent: artifact dir in %s: %w", dir, err)
 	}
-	promptPath := filepath.Join(runDir, "prompt.txt")
+	promptPath := filepath.Join(runDir, agentArtifactPromptFilename)
 	if err := writeTextFile(promptPath, prompt); err != nil {
 		return "", fmt.Errorf("agent: write prompt file: %w", err)
 	}
@@ -84,7 +89,7 @@ func (r OSAgentRunner) Run(cfg Config, dir string, prompt string, opts AgentRunO
 		}
 	}
 	if r.Log != nil {
-		r.Log("jrdev: verbose: agent artifacts %q (prompt.txt, output.txt)\n", runDir)
+		r.Log("jrdev: verbose: agent artifacts %q (%s, %s)\n", runDir, agentArtifactPromptFilename, agentArtifactOutputFilename)
 		if opts.Print {
 			r.Log("jrdev: verbose: agent cwd=%s\n", dir)
 			r.Log("jrdev: verbose: agent argv: %q --model %q --trust -p [file %q, %d-byte prompt] --output-format text\n",
@@ -99,7 +104,7 @@ func (r OSAgentRunner) Run(cfg Config, dir string, prompt string, opts AgentRunO
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
 	runErr := cmd.Run()
-	_ = writeTextFile(filepath.Join(runDir, "output.txt"), buf.String())
+	_ = writeTextFile(filepath.Join(runDir, agentArtifactOutputFilename), buf.String())
 	if runErr != nil {
 		return buf.String(), fmt.Errorf("agent (cwd=%s, prompt=%d bytes): %w\n%s", dir, len(prompt), runErr, buf.String())
 	}
