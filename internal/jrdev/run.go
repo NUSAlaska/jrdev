@@ -193,6 +193,7 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 		}
 		vlog(cfg, log, "jrdev: verbose: issue worktree base SHA %s\n", baseSHA)
 
+		proj := cfg.Project
 		implData := ImplementPromptData{
 			IssueNumber:       job.Number,
 			IssueTitle:        job.Title,
@@ -200,6 +201,8 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 			IssueBranch:       job.Branch,
 			IntegrationBranch: integrationBranch,
 			QueueLabel:        cfg.Label,
+			LintTests:         PromptLintTests(proj),
+			UnitTests:         PromptUnitTests(proj),
 		}
 		renderImplement := func() (string, error) {
 			var err error
@@ -272,6 +275,9 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 			IssueBranch:       job.Branch,
 			IntegrationBranch: integrationBranch,
 			QueueLabel:        cfg.Label,
+			LintTests:         PromptLintTests(proj),
+			UnitTests:         PromptUnitTests(proj),
+			IntegrationTests:  PromptIntegrationTests(proj),
 		}
 		renderMerge := func() (string, error) {
 			var err error
@@ -299,11 +305,6 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 				return fmt.Errorf("merge %s into integration: %w", job.Branch, err)
 			}
 		}
-		vlog(cfg, log, "jrdev: verbose: quality gate go vet ./... && go test ./... in %s\n", intPath)
-		if err := GoVetTest(intPath); err != nil {
-			return fmt.Errorf("post-merge quality gate: %w", err)
-		}
-		vlog(cfg, log, "jrdev: verbose: quality gate passed\n")
 
 		comment := fmt.Sprintf("Merged into integration branch %s via jrdev.", integrationBranch)
 		vlog(cfg, log, "jrdev: verbose: gh issue close %d + remove label %q\n", job.Number, cfg.Label)

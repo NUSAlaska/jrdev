@@ -40,4 +40,7 @@ type Config struct {
 	GhBin                string
 	Integration          string // rev for new integration branch, default "origin/main"
 	FreshStart           bool   // if true: skip resume prompt; clean jrdev worktrees/branches then new run
+	// Project is parsed from ProjectPath (.jrdev/config.yaml by default); required before the pipeline runs.
+	Project     ProjectConfig
+	ProjectPath string
 }

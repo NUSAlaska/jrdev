@@ -8,16 +8,19 @@ Merge issue branch **`{{.IssueBranch}}`** into the current integration branch (`
 
 1. `git merge {{.IssueBranch}} --no-edit`
 2. If there are conflicts, resolve them carefully and inteligently by reading both sides and choosing the correct resolution.
-3. After resolving conflicts run **`go vet ./...`** then **`go test ./...`** to verify everything works
-4. If tests fail, fix the issues before proceeding.
-5. Do **not** push to **`main`**.
+3. After the merge is clean, run the **integration** checks from the repository config below (each shell command in order). If a command fails, fix the issue before proceeding.
+4. Do **not** push to **`main`**.
+
+## Integration checks (`.jrdev/config.yaml`)
+
+{{.IntegrationTests}}
 
 ## GitHub (jrdev completes after you merge)
 
-**jrdev** will run `gh issue close` and remove label `{{.QueueLabel}}` after a successful merge and quality gate. You may still mention the integration branch in comments if helpful.
+**jrdev** will run `gh issue close` and remove label `{{.QueueLabel}}` after a successful merge when you finish with **COMPLETE** below. You may still mention the integration branch in comments if helpful.
 
 ## Completion marker
 
-When merge, **`go vet ./...`**, and **`go test ./...`** have all **succeeded**, end your output with this exact line on its own:
+When the merge is complete and every listed **integration** command has succeeded (or there are no integration commands / only the no-checks notice applies), end your output with this exact line on its own:
 
 COMPLETE

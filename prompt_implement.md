@@ -29,6 +29,16 @@ The body may include **full URLs** to other issues (for example a PRD). In **pri
 
 - Use the **GitHub CLI** from the **repository root** (same context **jrdev** uses), e.g. **`gh issue view <number> --json title,body`** or **`gh issue view <paste-the-issue-url>`**.
 
+## Configured checks (repository `.jrdev/config.yaml`)
+
+Run these **lint** commands before committing when you change code (if any are listed):
+
+{{.LintTests}}
+
+Run these **unit** commands before committing when you change code (if any are listed):
+
+{{.UnitTests}}
+
 ## Process
 
 1. Explore the repo and gather relevent information that will allow you to complete the task. Pay extra attention to the test files that touch the relevent parts of the code.
@@ -37,7 +47,7 @@ The body may include **full URLs** to other issues (for example a PRD). In **pri
   b. GREEN: write the implementation to pass that test
   c. REPEAT: until done
   d. REFACTOR the code
-3. Run **`go vet ./..`** and **`go test ./...`** (and focused tests you touch) before committing.
+3. Run the configured **lint** and **unit** commands above (and any focused checks appropriate to your edits) before committing.
 4. Make a git commit. The commit message must:
   a. Start with `JRDEV:` prefix
   b. Include task completed + PRD reference

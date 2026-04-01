@@ -24,6 +24,8 @@ type ImplementPromptData struct {
 	QueueLabel        string
 	CommitHistory     string // git log snippet for agent cwd (issue worktree)
 	GitDiff           string // git diff main..HEAD in agent cwd
+	LintTests         string // markdown: configured lint commands (from repo .jrdev/config.yaml)
+	UnitTests         string // markdown: configured unit commands
 }
 
 // ReviewPromptData is passed to the review template.
@@ -38,6 +40,9 @@ type MergePromptData struct {
 	QueueLabel        string
 	CommitHistory     string // git log snippet for agent cwd (integration worktree)
 	GitDiff           string // git diff main..HEAD in agent cwd
+	LintTests         string
+	UnitTests         string
+	IntegrationTests  string
 }
 
 // PRPromptData is passed to the pull-request description template.

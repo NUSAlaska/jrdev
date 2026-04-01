@@ -42,6 +42,7 @@ func run() int {
 	flag.BoolVar(&verbose, "verbose", false, "verbose logging (same as -v)")
 	integrationBase := flag.String("integration-base", "origin/main", "rev to branch integration run from")
 	fresh := flag.Bool("fresh", false, "discard prior jrdev worktrees/branches (--worktrees + agent-queue/*); skip resume prompt")
+	configPath := flag.String("config", "", "repository jrdev YAML (default: <repo>/.jrdev/config.yaml)")
 	agentBin := flag.String("agent", "", "Cursor agent binary (default: agent on PATH)")
 	agentModel := flag.String("agent-model", jrdev.DefaultAgentModel, "Cursor agent --model name")
 	agentCursorDir := flag.String("agent-cursor-config-dir", "", "set CURSOR_CONFIG_DIR to this path (must contain cli-config.json); see Cursor CLI configuration docs")
@@ -95,6 +96,32 @@ func run() int {
 		}
 	}
 
+	cfgYAML := *configPath
+	if cfgYAML == "" {
+		cfgYAML = filepath.Join(repoRoot, ".jrdev", "config.yaml")
+	} else {
+		var err error
+		cfgYAML, err = filepath.Abs(cfgYAML)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "jrdev: config path: %v\n", err)
+			return 1
+		}
+	}
+	projectCfg, err := jrdev.LoadProjectConfig(cfgYAML)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "jrdev: repository config not found at %s\n"+
+				"Create .jrdev/config.yaml with config_ready: true and optional lint, unit, and integration command lists (see parent PRD).\n", cfgYAML)
+		} else {
+			fmt.Fprintf(os.Stderr, "jrdev: config: %v\n", err)
+		}
+		return 1
+	}
+	if !projectCfg.ConfigReady {
+		fmt.Fprintf(os.Stderr, "jrdev: config_ready is false in %s — set config_ready: true when this repository is prepared for the agent pipeline.\n", cfgYAML)
+		return 1
+	}
+
 	prompts, err := loadPrompts()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "jrdev: prompts: %v\n", err)
@@ -116,6 +143,8 @@ func run() int {
 		GhBin:                *ghBin,
 		Integration:          *integrationBase,
 		FreshStart:           *fresh,
+		Project:              projectCfg,
+		ProjectPath:          cfgYAML,
 	}
 
 	log := func(format string, args ...any) {
@@ -194,6 +223,7 @@ func usage(name string, w io.Writer) {
 		{"--max-iterations n", "Outer loop cap; 0 means 2N+3 where N is open labeled issues at start"},
 		{"-v, --verbose", "Verbose logging (preflight steps, loop phases, agent argv, git/gh subprocess output)"},
 		{"--integration-base rev", "Revision to branch integration runs from, default origin/main"},
+		{"--config path", "Repository jrdev YAML; default <repo>/.jrdev/config.yaml"},
 		{"--fresh", "Remove jrdev worktrees and agent-queue/* branches; do not resume a prior integration run"},
 		{"--agent path", "Cursor agent binary; default is agent on PATH"},
 		{"--agent-model name", "Cursor agent --model; default " + jrdev.DefaultAgentModel},
