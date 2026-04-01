@@ -10,10 +10,14 @@ You are in the **issue git worktree** on **`{{.IssueBranch}}`**. **jrdev** only 
 
 ## Context
 Here are the last 10 commits:
+```
 {{.CommitHistory}}
+```
 
 Here is the current Diff:
+```
 {{.GitDiff}}
+```
 
 Integration branch: **`{{.IntegrationBranch}}`**
 

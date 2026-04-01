@@ -15,7 +15,9 @@ You are in the **issue git worktree** on the issue branch named below. **jrdev**
 - Queue label: `{{.QueueLabel}}`
 
 Here are the last 10 commits:
+```
 {{.CommitHistory}}
+```
 
 ### Issue body
 
