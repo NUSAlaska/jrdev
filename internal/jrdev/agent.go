@@ -42,6 +42,15 @@ func (r OSAgentRunner) Run(cfg Config, dir string, prompt string, opts AgentRunO
 	}
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = dir
+	if r.Log != nil {
+		if opts.Print {
+			r.Log("jrdev: verbose: agent cwd=%s\n", dir)
+			r.Log("jrdev: verbose: agent argv: %q --model %q -p [%d-byte prompt] --output-format text\n", bin, model, len(prompt))
+		} else {
+			r.Log("jrdev: verbose: agent cwd=%s\n", dir)
+			r.Log("jrdev: verbose: agent argv: %q --model %q [%d-byte prompt]\n", bin, model, len(prompt))
+		}
+	}
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf

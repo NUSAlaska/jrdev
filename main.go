@@ -37,7 +37,9 @@ func run() int {
 	dryRun := flag.Bool("dry-run", false, "preflight without agent smoke; stop before orchestration")
 	skipPR := flag.Bool("skip-pr", false, "do not run gh pr create at end")
 	maxIter := flag.Int("max-iterations", 0, "outer loop cap (default 2N+3 from queue count at start)")
-	verbose := flag.Bool("v", false, "verbose logging")
+	var verbose bool
+	flag.BoolVar(&verbose, "v", false, "verbose logging")
+	flag.BoolVar(&verbose, "verbose", false, "verbose logging (same as -v)")
 	integrationBase := flag.String("integration-base", "origin/main", "rev to branch integration run from")
 	agentBin := flag.String("agent", "", "Cursor agent binary (default: agent on PATH)")
 	agentModel := flag.String("agent-model", jrdev.DefaultAgentModel, "Cursor agent --model name")
@@ -85,7 +87,7 @@ func run() int {
 		DryRun:      *dryRun,
 		SkipPR:      *skipPR,
 		MaxIters:    *maxIter,
-		Verbose:     *verbose,
+		Verbose:     verbose,
 		AgentBin:    *agentBin,
 		AgentModel:  *agentModel,
 		GhBin:       *ghBin,
@@ -96,7 +98,7 @@ func run() int {
 		fmt.Printf(format, args...)
 	}
 	var a jrdev.AgentRunner = jrdev.OSAgentRunner{Log: nil}
-	if *verbose {
+	if verbose {
 		a = jrdev.OSAgentRunner{Log: log}
 	}
 
@@ -161,7 +163,7 @@ func usage(name string, w io.Writer) {
 		{"--dry-run", "Preflight without agent smoke; exit before orchestration"},
 		{"--skip-pr", "Do not run gh pr create when the loop finishes"},
 		{"--max-iterations n", "Outer loop cap; 0 means 2N+3 where N is open labeled issues at start"},
-		{"-v", "Verbose logging (agent and subprocess output)"},
+		{"-v, --verbose", "Verbose logging (preflight steps, loop phases, agent argv, git/gh subprocess output)"},
 		{"--integration-base rev", "Revision to branch integration runs from, default origin/main"},
 		{"--agent path", "Cursor agent binary; default is agent on PATH"},
 		{"--agent-model name", "Cursor agent --model; default " + jrdev.DefaultAgentModel},

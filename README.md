@@ -123,7 +123,7 @@ After `go install .`, replace `go run .` with **`jrdev`** (or **`jrdev.exe`**) o
 | `--agent` | `agent` on PATH | Cursor agent binary |
 | `--agent-model` | `composer-2-fast` | Value passed to Cursor agent as `--model` |
 | `--gh` | `gh` | GitHub CLI binary |
-| `-v` | off | Verbose agent/subprocess logging |
+| `-v` / `--verbose` | off | Verbose preflight, per-cycle phases, agent invocation summary, git subprocess output |
 | `-help`, `-h` | — | Print usage and exit |
 
 ## Behavior (summary)

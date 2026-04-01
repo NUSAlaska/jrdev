@@ -10,6 +10,15 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 	if log == nil {
 		log = func(string, ...any) {}
 	}
+	vlog(cfg, log, "jrdev: verbose: repo root=%q label=%q dryRun=%v skipPR=%v integration=%q\n",
+		cfg.RepoRoot, cfg.Label, cfg.DryRun, cfg.SkipPR, cfg.Integration)
+	agentBin := cfg.AgentBin
+	if agentBin == "" {
+		agentBin = "agent"
+	}
+	vlog(cfg, log, "jrdev: verbose: agent=%q model=%q gh=%q worktrees=%q\n",
+		agentBin, cfg.AgentModel, cfg.GhBin, cfg.Worktrees)
+
 	n, err := QueueOpenCount(cfg)
 	if err != nil {
 		return err
@@ -20,10 +29,12 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 	}
 	maxIter := EffectiveMaxIterations(n, cfg.MaxIters)
 	log("jrdev: N=%d open queued issues; maxIterations=%d\n", n, maxIter)
+	vlog(cfg, log, "jrdev: verbose: maxIterations raw config=%d effective=%d (default 2N+3 when 0)\n", cfg.MaxIters, maxIter)
 
-	if err := RunPreflight(cfg, agent); err != nil {
+	if err := RunPreflight(cfg, agent, log); err != nil {
 		return err
 	}
+	vlog(cfg, log, "jrdev: verbose: preflight finished\n")
 
 	if cfg.DryRun {
 		log("jrdev: --dry-run stops after preflight (no agent smoke, no git/orchestration).\n")
@@ -31,6 +42,7 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 	}
 
 	workRoot := filepath.Join(cfg.RepoRoot, cfg.Worktrees)
+	vlog(cfg, log, "jrdev: verbose: worktrees root=%q\n", workRoot)
 	if err := EnsureWorktreesRoot(workRoot); err != nil {
 		return err
 	}
@@ -40,6 +52,7 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 		git.Log = log
 	}
 
+	vlog(cfg, log, "jrdev: verbose: git fetch origin (repo=%s)\n", cfg.RepoRoot)
 	if err := git.FetchOrigin(); err != nil {
 		return err
 	}
@@ -47,6 +60,7 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 	if base == "" {
 		base = "origin/main"
 	}
+	vlog(cfg, log, "jrdev: verbose: creating integration branch from base %q\n", base)
 
 	integrationBranch, intPath, err := git.CreateIntegrationBranchAndWorktree(workRoot, base)
 	if err != nil {
@@ -63,6 +77,7 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 		if err != nil {
 			return err
 		}
+		vlog(cfg, log, "jrdev: verbose: gh issue list JSON for planner: %d bytes\n", len(issuesJSON))
 		planBody, err := Render("plan", prompts.Plan, PlanPromptData{
 			QueueLabel: cfg.Label,
 			IssuesJSON: issuesJSON,
@@ -70,10 +85,12 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 		if err != nil {
 			return err
 		}
+		vlog(cfg, log, "jrdev: verbose: plan phase — rendered prompt %d bytes (worktree=%s)\n", len(planBody), intPath)
 		planOut, err := agent.Run(cfg, intPath, planBody, AgentRunOptions{Print: true})
 		if err != nil {
 			return fmt.Errorf("plan phase: %w", err)
 		}
+		vlog(cfg, log, "jrdev: verbose: plan phase — agent output %d bytes\n", len(planOut))
 		doc, err := ParsePlan(planOut)
 		if err != nil {
 			return fmt.Errorf("plan parse: %w", err)
@@ -83,6 +100,7 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 			break
 		}
 		job := doc.Issues[0]
+		vlog(cfg, log, "jrdev: verbose: plan — first job issue #%d branch=%q title=%q\n", job.Number, job.Branch, job.Title)
 
 		issueSlug := IssueSlug(job.Title)
 		expBranch := fmt.Sprintf("agent-queue/issue-%d-%s", job.Number, issueSlug)
@@ -90,16 +108,20 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 			log("jrdev: warning: plan branch %q differs from conventional %q (using plan branch).\n", job.Branch, expBranch)
 		}
 
+		vlog(cfg, log, "jrdev: verbose: gh issue view %d (body for implement prompt)\n", job.Number)
 		body, err := IssueBody(cfg, job.Number)
 		if err != nil {
 			return err
 		}
+		vlog(cfg, log, "jrdev: verbose: issue #%d body length %d runes\n", job.Number, len([]rune(body)))
 
 		issuePath := IssueWorkPath(workRoot, job.Number, issueSlug)
+		vlog(cfg, log, "jrdev: verbose: create issue worktree path=%q from integration %q branch %q\n", issuePath, integrationBranch, job.Branch)
 		baseSHA, err := git.CreateIssueWorktree(issuePath, integrationBranch, job.Branch)
 		if err != nil {
 			return err
 		}
+		vlog(cfg, log, "jrdev: verbose: issue worktree base SHA %s\n", baseSHA)
 
 		implData := ImplementPromptData{
 			IssueNumber:       job.Number,
@@ -113,6 +135,7 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 		if err != nil {
 			return err
 		}
+		vlog(cfg, log, "jrdev: verbose: implement phase — prompt %d bytes\n", len(implBody))
 		if _, err := agent.Run(cfg, issuePath, implBody, AgentRunOptions{Print: true}); err != nil {
 			return fmt.Errorf("implement: %w", err)
 		}
@@ -120,6 +143,7 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 		if err != nil {
 			return err
 		}
+		vlog(cfg, log, "jrdev: verbose: commits ahead of base after implement: %d\n", commits)
 		if commits == 0 {
 			log("jrdev: zero commits after implement — retrying once.\n")
 			if _, err := agent.Run(cfg, issuePath, implBody, AgentRunOptions{Print: true}); err != nil {
@@ -129,6 +153,7 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 			if err != nil {
 				return err
 			}
+			vlog(cfg, log, "jrdev: verbose: commits ahead after implement retry: %d\n", commits)
 		}
 		if commits == 0 {
 			return fmt.Errorf("jrdev: issue #%d produced zero commits after retry — aborting (no merge, no gh close)", job.Number)
@@ -139,6 +164,7 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 			if err != nil {
 				return err
 			}
+			vlog(cfg, log, "jrdev: verbose: review phase — prompt %d bytes\n", len(revBody))
 			if _, err := agent.Run(cfg, issuePath, revBody, AgentRunOptions{Print: true}); err != nil {
 				return fmt.Errorf("review: %w", err)
 			}
@@ -154,6 +180,7 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 		if err != nil {
 			return err
 		}
+		vlog(cfg, log, "jrdev: verbose: merge phase (agent) — prompt %d bytes (integration worktree=%s)\n", len(mergeBody), intPath)
 		if _, err := agent.Run(cfg, intPath, mergeBody, AgentRunOptions{Print: true}); err != nil {
 			return fmt.Errorf("merge phase: %w", err)
 		}
@@ -161,16 +188,21 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 		if err != nil {
 			return err
 		}
+		vlog(cfg, log, "jrdev: verbose: branch %q already merged into integration HEAD: %v\n", job.Branch, merged)
 		if !merged {
+			vlog(cfg, log, "jrdev: verbose: git merge %q into integration at %s\n", job.Branch, intPath)
 			if err := MergeBranchInDir(intPath, job.Branch); err != nil {
 				return fmt.Errorf("merge %s into integration: %w", job.Branch, err)
 			}
 		}
+		vlog(cfg, log, "jrdev: verbose: quality gate go vet ./... && go test ./... in %s\n", intPath)
 		if err := GoVetTest(intPath); err != nil {
 			return fmt.Errorf("post-merge quality gate: %w", err)
 		}
+		vlog(cfg, log, "jrdev: verbose: quality gate passed\n")
 
 		comment := fmt.Sprintf("Merged into integration branch %s via jrdev.", integrationBranch)
+		vlog(cfg, log, "jrdev: verbose: gh issue close %d + remove label %q\n", job.Number, cfg.Label)
 		if err := CloseIssue(cfg, job.Number, comment); err != nil {
 			return err
 		}
@@ -179,10 +211,12 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 		}
 
 		// Push integration branch for PR
+		vlog(cfg, log, "jrdev: verbose: git push -u origin %q\n", integrationBranch)
 		if err := git.git("push", "-u", "origin", integrationBranch); err != nil {
 			log("jrdev: warning: git push integration: %v\n", err)
 		}
 
+		vlog(cfg, log, "jrdev: verbose: remove issue worktree %q\n", issuePath)
 		_ = git.RemoveWorktree(issuePath)
 	}
 
@@ -193,9 +227,12 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 	if !cfg.SkipPR {
 		title := fmt.Sprintf("jrdev: agent-queue integration %s", integrationBranch)
 		body := fmt.Sprintf("Automated integration branch %q.\n\nLabel %q was processed by jrdev.", integrationBranch, cfg.Label)
+		vlog(cfg, log, "jrdev: verbose: gh pr create base=main head=%q\n", integrationBranch)
 		if err := CreatePullRequest(cfg, title, body, integrationBranch); err != nil {
 			return err
 		}
+	} else {
+		vlog(cfg, log, "jrdev: verbose: skipping gh pr create (--skip-pr)\n")
 	}
 
 	return nil
