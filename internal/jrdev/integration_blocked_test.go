@@ -51,6 +51,17 @@ func TestIntegrationBlockedFromStdout(t *testing.T) {
 			wantBlocked: true,
 			wantReason:  "first",
 		},
+		{
+			name:        "wrong case prefix does not match",
+			stdout:      "jrdev_integration_blocked: ignored\n",
+			wantBlocked: false,
+		},
+		{
+			name:        "suffix whitespace only yields empty reason",
+			stdout:      "JRDEV_INTEGRATION_BLOCKED:   \n",
+			wantBlocked: true,
+			wantReason:  "",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -75,6 +86,19 @@ func TestResolveIntegrationBlockedDecision_CLIOverridesMeta(t *testing.T) {
 	w, err := ResolveIntegrationBlockedDecision(cfg, strings.NewReader(""), nil, nil, "", false)
 	if err != nil || !w {
 		t.Fatalf("want merge waive, got waive=%v err=%v", w, err)
+	}
+}
+
+func TestResolveIntegrationBlockedDecision_CLIAbortOverridesMetaMerge(t *testing.T) {
+	cfg := Config{
+		IntegrationBlocked: "abort",
+		Project: ProjectConfig{
+			Meta: map[string]any{MetaIntegrationBlockedAction: "merge"},
+		},
+	}
+	w, err := ResolveIntegrationBlockedDecision(cfg, strings.NewReader(""), nil, nil, "", false)
+	if err != nil || w {
+		t.Fatalf("want abort, got waive=%v err=%v", w, err)
 	}
 }
 
@@ -110,6 +134,18 @@ func TestResolveIntegrationBlockedDecision_nonInteractiveDefaultAbort(t *testing
 	}
 }
 
+func TestResolveIntegrationBlockedDecision_invalidMetaNonInteractiveDefaultsAbort(t *testing.T) {
+	cfg := Config{
+		Project: ProjectConfig{
+			Meta: map[string]any{MetaIntegrationBlockedAction: "nope"},
+		},
+	}
+	w, err := ResolveIntegrationBlockedDecision(cfg, strings.NewReader(""), nil, nil, "", false)
+	if err != nil || w {
+		t.Fatalf("invalid meta should fall through to default abort, got waive=%v err=%v", w, err)
+	}
+}
+
 func TestResolveIntegrationBlockedDecision_invalidCLI(t *testing.T) {
 	cfg := Config{IntegrationBlocked: "maybe"}
 	_, err := ResolveIntegrationBlockedDecision(cfg, strings.NewReader(""), nil, nil, "", false)
@@ -127,6 +163,15 @@ func TestResolveIntegrationBlockedDecision_promptWaive(t *testing.T) {
 	}
 }
 
+func TestResolveIntegrationBlockedDecision_promptWaiveCRLF(t *testing.T) {
+	cfg := Config{}
+	var out strings.Builder
+	w, err := ResolveIntegrationBlockedDecision(cfg, strings.NewReader("m\r\n"), &out, nil, "", true)
+	if err != nil || !w {
+		t.Fatalf("want waive with CRLF input, got waive=%v err=%v", w, err)
+	}
+}
+
 func TestResolveIntegrationBlockedDecision_promptAbort(t *testing.T) {
 	cfg := Config{}
 	var out strings.Builder
@@ -136,9 +181,25 @@ func TestResolveIntegrationBlockedDecision_promptAbort(t *testing.T) {
 	}
 }
 
+func TestResolveIntegrationBlockedDecision_promptExplicitAbortLetter(t *testing.T) {
+	cfg := Config{}
+	var out strings.Builder
+	w, err := ResolveIntegrationBlockedDecision(cfg, strings.NewReader("a\n"), &out, nil, "", true)
+	if err != nil || w {
+		t.Fatalf("want abort for explicit A, got waive=%v err=%v", w, err)
+	}
+}
+
 func TestMetaSaysWaiveIntegration_invalidIgnored(t *testing.T) {
 	_, ok := metaSaysWaiveIntegration(map[string]any{MetaIntegrationBlockedAction: "nope"})
 	if ok {
 		t.Fatal("invalid meta value should be ignored")
+	}
+}
+
+func TestMetaSaysWaiveIntegration_nonStringIgnored(t *testing.T) {
+	_, ok := metaSaysWaiveIntegration(map[string]any{MetaIntegrationBlockedAction: 1})
+	if ok {
+		t.Fatal("non-string meta value should be ignored")
 	}
 }
