@@ -142,6 +142,8 @@ go run . --fresh
 go run . --max-iterations 20
 ```
 
+On a **terminal** (interactive stdin), a **successful** full run ends with a prompt: remove **`--worktrees`** and local **`agent-queue/*`** branches, or leave them to inspect prompts and diffs first.
+
 After `go install .`, replace `go run .` with **`jrdev`** (or **`jrdev.exe`**) on `PATH`.
 
 ## Flags
@@ -152,7 +154,7 @@ After `go install .`, replace `go run .` with **`jrdev`** (or **`jrdev.exe`**) o
 | `--worktrees` | `.worktrees` | Directory under repo for worktrees (should be gitignored) |
 | `--label` | `agent-queue` | Queue label |
 | `--dry-run` | off | Skip agent smoke in preflight; exit before creating integration/issue worktrees |
-| `--skip-pr` | off | Do not `gh pr create` when the loop finishes |
+| `--skip-pr` | off | Do not `gh pr create` when the loop finishes (end-of-run cleanup prompt still runs on a TTY) |
 | `--max-iterations` | `2N+3` | Outer loop cap |
 | `--integration-base` | `origin/main` | Base ref for new `agent-queue/run-…` branch |
 | `--fresh` | off | Discard prior jrdev state: remove worktrees under `--worktrees` and local `agent-queue/run-*` / `agent-queue/issue-*` branches; skip the resume prompt (always start a new integration run) |
@@ -169,8 +171,9 @@ After `go install .`, replace `go run .` with **`jrdev`** (or **`jrdev.exe`**) o
 1. **N** = count of open issues with the queue label; if **N == 0**, exit cleanly.
 2. **Preflight** (once): `git` on PATH and `git version`, `gh auth status`, **`agent`** resolved and able to run `-h` / `--help`; unless `--dry-run`, a minimal **`agent -p`** smoke that must print a fixed token (that prompt forbids shell commands and file edits). Agent invocations use the [permission / `CURSOR_CONFIG_DIR`](#cursor-agent-cli-permissions--p--headless) rules above.
 3. **Integration worktree**: After `git fetch origin`, if a prior run left a resumable **`agent-queue/run-…`** worktree under **`--worktrees`**, an **interactive** terminal prompts: **continue** with that branch and worktree, or **clean** and start fresh (same cleanup as **`--fresh`**). With **non-interactive** stdin, jrdev **resumes** automatically when possible and logs a hint to use **`--fresh`** if you want a clean run. **`--fresh`** skips the prompt and always clears that jrdev state, then creates a new **`agent-queue/run-<timestamp>`** and worktree from **`--integration-base`**.
-4. Each **cycle**: plan (in integration worktree) → parse `<plan>…</plan>` JSON → **one** issue (first row) → issue worktree from integration tip → **implement**, **review** (if there are commits), and **merge** agent phases each loop until stdout contains **`COMPLETE`**, re-rendering the prompt with fresh git history/diff on every attempt (cap: 25 tries per phase); if implement produces zero commits, that phase runs again once the same way → **`go vet ./...`** and **`go test ./...`** on integration → **`gh issue close`** and remove label → push integration branch.
+4. Each **cycle**: plan (in integration worktree) → parse `<plan>…</plan>` JSON → **one** issue (first row) → issue worktree from integration tip → **implement**, **review** (if there are commits), and **merge** agent phases each loop until stdout contains **`COMPLETE`**, re-rendering the prompt with fresh git history/diff on every attempt (cap: 25 tries per phase); if implement produces zero commits, that phase runs again once the same way → **`go vet ./...`** and **`go test ./...`** on integration → **`gh issue close`** and remove label → push integration branch. **Issue worktrees and `agent-queue/issue-…` branches are not removed here**—they stay under **`--worktrees`** so you can inspect transcripts and diffs across every issue processed in the run.
 5. Stops when the plan returns **`issues: []`**, or **max iterations** is reached, then **`gh pr create`** to **`main`** unless **`--skip-pr`**.
+6. **End of a successful run**: On an **interactive** terminal (real TTY on stdin), `jrdev` asks whether to remove **all** jrdev-linked worktrees under **`--worktrees`** and delete local **`agent-queue/run-*`** / **`agent-queue/issue-*`** branches—the same scope as **`--fresh`**. **Y** / **yes** performs that cleanup; anything else (including Enter) **leaves** trees and branches for inspection. With **non-interactive** stdin (piped or CI), there is **no** prompt and **no** automatic cleanup; run **`jrdev --fresh`** before the next run if you want a clean slate, or delete worktrees/branches manually.
 
 `main` is never merged by the tool directly; landing on `main` is via PR only.
 
@@ -191,7 +194,8 @@ With **`-v` / `--verbose`**, logs include the artifact directory for each agent 
 
 ## Failure and recovery
 
-- **Interrupted run (Ctrl+C, crash, merge failure, etc.)**: The integration branch and worktrees under **`--worktrees`** are usually left in place. On the **next** full run, if a valid **`agent-queue/run-…`** worktree still exists, you get a **resume vs fresh** prompt (TTY) or an automatic **resume** (non-interactive). Choose **fresh** in the prompt, or run **`jrdev --fresh`**, to remove jrdev worktrees under **`--worktrees`** and local **`agent-queue/run-*`** / **`agent-queue/issue-*`** branches before starting a new run.
+- **Successful run, worktrees still on disk**: Until you answer **Y** at the end-of-run prompt (TTY) or run **`--fresh`**, integration and issue worktrees remain under **`--worktrees`** with **`.jrdev/agent-runs/`** and branches **`agent-queue/run-…`** / **`agent-queue/issue-…`** so you can review everything from one session.
+- **Interrupted run (Ctrl+C, crash, merge failure, etc.)**: The integration branch and worktrees under **`--worktrees`** are usually left in place (there is **no** end-of-run cleanup prompt because the run did not finish cleanly). On the **next** full run, if a valid **`agent-queue/run-…`** worktree still exists, you get a **resume vs fresh** prompt (TTY) or an automatic **resume** (non-interactive). Choose **fresh** in the prompt, or run **`jrdev --fresh`**, to remove jrdev worktrees under **`--worktrees`** and local **`agent-queue/run-*`** / **`agent-queue/issue-*`** branches before starting a new run.
 - **Zero commits after implement retry**: run aborts; issue is not closed; integration branch and worktrees remain under `.worktrees/` for inspection.
 - **Agent phase never prints `COMPLETE`** (after 25 attempts on implement, review, or merge): run aborts with an error; prompts should instruct the model to include `COMPLETE` when the phase is finished.
 - **Merge / `go vet` / `go test` failure**: fix locally in the integration or issue worktree, or remove worktrees/branches manually (or **`--fresh`** / **fresh** at the resume prompt).

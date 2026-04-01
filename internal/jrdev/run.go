@@ -307,15 +307,13 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 		if err := git.PushUpstream(integrationBranch); err != nil {
 			log("jrdev: warning: git push integration: %v\n", err)
 		}
-
-		vlog(cfg, log, "jrdev: verbose: remove issue worktree %q\n", issuePath)
-		_ = git.RemoveWorktree(issuePath)
 	}
 
 	if iter >= maxIter {
 		log("jrdev: stopped: hit maxIterations=%d\n", maxIter)
 	}
 
+	prCreated := false
 	if !cfg.SkipPR {
 		title := fmt.Sprintf("jrdev: agent-queue integration %s", integrationBranch)
 		body := fmt.Sprintf("Automated integration branch %q.\n\nLabel %q was processed by jrdev.", integrationBranch, cfg.Label)
@@ -323,8 +321,27 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 		if err := CreatePullRequest(cfg, title, body, integrationBranch); err != nil {
 			return err
 		}
+		prCreated = true
 	} else {
 		vlog(cfg, log, "jrdev: verbose: skipping gh pr create (--skip-pr)\n")
+	}
+
+	if StdinIsInteractive() {
+		doCleanup, err := PromptCleanupJrdevWorkstate(os.Stdin, os.Stderr, prCreated)
+		if err != nil {
+			return err
+		}
+		if doCleanup {
+			vlog(cfg, log, "jrdev: verbose: cleaning jrdev worktrees under %q and agent-queue/* branches\n", workRootAbs)
+			if err := git.CleanupJrdevWorkstate(workRootAbs); err != nil {
+				return err
+			}
+			log("jrdev: removed jrdev worktrees and local agent-queue/* branches.\n")
+		} else {
+			log("jrdev: leaving worktrees and branches in place under %s (inspect before your next run).\n", workRoot)
+		}
+	} else {
+		log("jrdev: non-interactive stdin — leaving worktrees and branches under %s in place (confirm cleanup when running in a terminal, or use --fresh to discard before a new run).\n", workRoot)
 	}
 
 	return nil

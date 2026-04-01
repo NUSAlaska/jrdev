@@ -2,6 +2,7 @@ package jrdev
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -41,5 +42,21 @@ branch refs/heads/agent-queue/run-20260101-120000-123456789
 	}
 	if entries[1].BranchRef != "refs/heads/agent-queue/run-20260101-120000-123456789" {
 		t.Fatalf("branch: %q", entries[1].BranchRef)
+	}
+}
+
+func TestPromptCleanupJrdevWorkstate_yes(t *testing.T) {
+	var out strings.Builder
+	ok, err := PromptCleanupJrdevWorkstate(strings.NewReader("y\n"), &out, true)
+	if err != nil || !ok {
+		t.Fatalf("got ok=%v err=%v", ok, err)
+	}
+}
+
+func TestPromptCleanupJrdevWorkstate_noDefault(t *testing.T) {
+	var out strings.Builder
+	ok, err := PromptCleanupJrdevWorkstate(strings.NewReader("\n"), &out, false)
+	if err != nil || ok {
+		t.Fatalf("got ok=%v err=%v", ok, err)
 	}
 }

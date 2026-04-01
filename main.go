@@ -176,6 +176,7 @@ func usage(name string, w io.Writer) {
 	fmt.Fprintf(&b, "  %s --dry-run               preflight only; no agent smoke, stops before worktrees\n", name)
 	fmt.Fprintf(&b, "  %s --repo <path>           set the git repository root explicitly\n", name)
 	fmt.Fprintf(&b, "  %s -v --max-iterations 20  verbose logs; cap the outer iteration loop\n\n", name)
+	fmt.Fprintf(&b, "After a successful run (pull request created, or --skip-pr), an interactive terminal prompts to remove jrdev worktrees under --worktrees and local agent-queue/* branches, so you can inspect prompts and code first. Non-interactive stdin skips that cleanup.\n\n")
 	fmt.Fprintf(&b, "Flags:\n")
 	_, _ = io.WriteString(w, b.String())
 

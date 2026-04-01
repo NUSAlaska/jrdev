@@ -168,6 +168,32 @@ func PromptResumeOrCleanIntegration(stdin io.Reader, stdout io.Writer, branch, w
 	}
 }
 
+// PromptCleanupJrdevWorkstate asks whether to remove jrdev-linked worktrees and local agent-queue/* branches.
+// prCreated should be true when a PR was opened; false when --skip-pr was used or no PR step ran.
+// Returns true if the user confirms cleanup. Empty input and anything other than y/yes means decline.
+func PromptCleanupJrdevWorkstate(stdin io.Reader, stdout io.Writer, prCreated bool) (cleanup bool, err error) {
+	if prCreated {
+		fmt.Fprintf(stdout, "\njrdev: pull request created.\n\n")
+	} else {
+		fmt.Fprintf(stdout, "\njrdev: run finished (--skip-pr; no PR created).\n\n")
+	}
+	fmt.Fprintf(stdout, "Remove all jrdev worktrees under --worktrees and delete local agent-queue/* branches?\n")
+	fmt.Fprintf(stdout, "  [Y]es — delete worktrees and branches\n")
+	fmt.Fprintf(stdout, "  [N]o  — leave them so you can inspect prompts, outputs, and diffs (default)\n\n")
+	fmt.Fprintf(stdout, "Enter Y or N (default N): ")
+	line, err := bufio.NewReader(stdin).ReadString('\n')
+	if err != nil {
+		return false, err
+	}
+	s := strings.ToLower(strings.TrimSpace(line))
+	switch s {
+	case "y", "yes":
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
 // StdinIsInteractive reports whether jrdev can prompt on stdin (TTY).
 func StdinIsInteractive() bool {
 	return term.IsTerminal(int(os.Stdin.Fd()))
