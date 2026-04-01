@@ -35,4 +35,5 @@ type Config struct {
 	AgentPermissionsFile string
 	GhBin                string
 	Integration          string // rev for new integration branch, default "origin/main"
+	FreshStart           bool   // if true: skip resume prompt; clean jrdev worktrees/branches then new run
 }

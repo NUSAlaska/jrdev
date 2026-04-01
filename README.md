@@ -135,6 +135,9 @@ go run . --dry-run
 # Full run (preflight includes a minimal agent smoke unless --dry-run)
 go run .
 
+# Start a new integration run even if a prior agent-queue/run-… worktree exists
+go run . --fresh
+
 # Cap the outer loop (default is 2N+3 for N = open labeled issues at start)
 go run . --max-iterations 20
 ```
@@ -152,6 +155,7 @@ After `go install .`, replace `go run .` with **`jrdev`** (or **`jrdev.exe`**) o
 | `--skip-pr` | off | Do not `gh pr create` when the loop finishes |
 | `--max-iterations` | `2N+3` | Outer loop cap |
 | `--integration-base` | `origin/main` | Base ref for new `agent-queue/run-…` branch |
+| `--fresh` | off | Discard prior jrdev state: remove worktrees under `--worktrees` and local `agent-queue/run-*` / `agent-queue/issue-*` branches; skip the resume prompt (always start a new integration run) |
 | `--agent` | `agent` on PATH | Cursor agent binary |
 | `--agent-model` | `composer-2-fast` | Value passed to Cursor agent as `--model` |
 | `--agent-permissions` | (see [permissions](#cursor-agent-cli-permissions--p--headless)) | JSON allow/deny file; `jrdev` materializes `cli-config.json` and sets `CURSOR_CONFIG_DIR` |
@@ -164,18 +168,35 @@ After `go install .`, replace `go run .` with **`jrdev`** (or **`jrdev.exe`**) o
 
 1. **N** = count of open issues with the queue label; if **N == 0**, exit cleanly.
 2. **Preflight** (once): `git` on PATH and `git version`, `gh auth status`, **`agent`** resolved and able to run `-h` / `--help`; unless `--dry-run`, a minimal **`agent -p`** smoke that must print a fixed token (that prompt forbids shell commands and file edits). Agent invocations use the [permission / `CURSOR_CONFIG_DIR`](#cursor-agent-cli-permissions--p--headless) rules above.
-3. Creates **`agent-queue/run-<timestamp>`** and a worktree under **`--worktrees`** from **`--integration-base`**.
+3. **Integration worktree**: After `git fetch origin`, if a prior run left a resumable **`agent-queue/run-…`** worktree under **`--worktrees`**, an **interactive** terminal prompts: **continue** with that branch and worktree, or **clean** and start fresh (same cleanup as **`--fresh`**). With **non-interactive** stdin, jrdev **resumes** automatically when possible and logs a hint to use **`--fresh`** if you want a clean run. **`--fresh`** skips the prompt and always clears that jrdev state, then creates a new **`agent-queue/run-<timestamp>`** and worktree from **`--integration-base`**.
 4. Each **cycle**: plan (in integration worktree) → parse `<plan>…</plan>` JSON → **one** issue (first row) → issue worktree from integration tip → **implement**, **review** (if there are commits), and **merge** agent phases each loop until stdout contains **`COMPLETE`**, re-rendering the prompt with fresh git history/diff on every attempt (cap: 25 tries per phase); if implement produces zero commits, that phase runs again once the same way → **`go vet ./...`** and **`go test ./...`** on integration → **`gh issue close`** and remove label → push integration branch.
 5. Stops when the plan returns **`issues: []`**, or **max iterations** is reached, then **`gh pr create`** to **`main`** unless **`--skip-pr`**.
 
 `main` is never merged by the tool directly; landing on `main` is via PR only.
 
+## Local agent transcripts (`.jrdev/`)
+
+Every Cursor **`agent`** invocation **`jrdev`** launches (preflight smoke, plan, implement, review, merge) stores the **full prompt** and the **combined stdout/stderr** of that run under the **process working directory** for that step—the **git repo root** during preflight, or the **integration / issue worktree** during the main loop:
+
+| Path | Contents |
+|------|----------|
+| **`.jrdev/agent-runs/<timestamp>-<pid>/prompt.txt`** | Exact prompt text passed to the agent (via `-p` pointing at this path, relative to that cwd). |
+| **`.jrdev/agent-runs/<timestamp>-<pid>/output.txt`** | Everything the agent process printed (success or failure). |
+
+The first time artifacts are written in a given worktree, **`jrdev`** creates **`.jrdev/.gitignore`** so **`agent-runs/`** is ignored by Git in that tree. If your **`--worktrees`** directory is already gitignored (recommended), those paths usually stay hidden from **`git status`** entirely.
+
+If you run preflight from the **repo root** and **`--worktrees`** is not under an ignored path, consider adding **`.jrdev/`** to your **repository root** `.gitignore` so local transcripts (and the nested `.gitignore`) never clutter **`git status`**.
+
+With **`-v` / `--verbose`**, logs include the artifact directory for each agent run—useful to open the matching **`prompt.txt`** and **`output.txt`** after a failure.
+
 ## Failure and recovery
 
+- **Interrupted run (Ctrl+C, crash, merge failure, etc.)**: The integration branch and worktrees under **`--worktrees`** are usually left in place. On the **next** full run, if a valid **`agent-queue/run-…`** worktree still exists, you get a **resume vs fresh** prompt (TTY) or an automatic **resume** (non-interactive). Choose **fresh** in the prompt, or run **`jrdev --fresh`**, to remove jrdev worktrees under **`--worktrees`** and local **`agent-queue/run-*`** / **`agent-queue/issue-*`** branches before starting a new run.
 - **Zero commits after implement retry**: run aborts; issue is not closed; integration branch and worktrees remain under `.worktrees/` for inspection.
 - **Agent phase never prints `COMPLETE`** (after 25 attempts on implement, review, or merge): run aborts with an error; prompts should instruct the model to include `COMPLETE` when the phase is finished.
-- **Merge / `go vet` / `go test` failure**: fix locally in the integration or issue worktree, or remove worktrees/branches manually.
+- **Merge / `go vet` / `go test` failure**: fix locally in the integration or issue worktree, or remove worktrees/branches manually (or **`--fresh`** / **fresh** at the resume prompt).
 - **SSH auth to `origin`**: ensure `ssh-add` / agent (or HTTPS) works; see **Network / auth** above. **Non-interactive** environments cannot complete interactive `ssh-add` recovery.
 - **Agent smoke or plan/implement errors about blocked tools**: configure **[Cursor agent CLI permissions](#cursor-agent-cli-permissions--p--headless)** (`repo/.cursor/cli-config.json`, `jrdev-agent-permissions.json`, or flags).
+- **Debugging agent failures**: inspect the latest directories under **`.jrdev/agent-runs/`** in the relevant cwd (repo root for smoke, integration or issue worktree for orchestration); see **[Local agent transcripts (`.jrdev/`)](#local-agent-transcripts-jrdev)**.
 
 See **`PROMPTS.md`** for template placeholders in the embedded prompts.

@@ -41,6 +41,7 @@ func run() int {
 	flag.BoolVar(&verbose, "v", false, "verbose logging")
 	flag.BoolVar(&verbose, "verbose", false, "verbose logging (same as -v)")
 	integrationBase := flag.String("integration-base", "origin/main", "rev to branch integration run from")
+	fresh := flag.Bool("fresh", false, "discard prior jrdev worktrees/branches (--worktrees + agent-queue/*); skip resume prompt")
 	agentBin := flag.String("agent", "", "Cursor agent binary (default: agent on PATH)")
 	agentModel := flag.String("agent-model", jrdev.DefaultAgentModel, "Cursor agent --model name")
 	agentCursorDir := flag.String("agent-cursor-config-dir", "", "set CURSOR_CONFIG_DIR to this path (must contain cli-config.json); see Cursor CLI configuration docs")
@@ -114,6 +115,7 @@ func run() int {
 		AgentPermissionsFile: permPath,
 		GhBin:                *ghBin,
 		Integration:          *integrationBase,
+		FreshStart:           *fresh,
 	}
 
 	log := func(format string, args ...any) {
@@ -187,6 +189,7 @@ func usage(name string, w io.Writer) {
 		{"--max-iterations n", "Outer loop cap; 0 means 2N+3 where N is open labeled issues at start"},
 		{"-v, --verbose", "Verbose logging (preflight steps, loop phases, agent argv, git/gh subprocess output)"},
 		{"--integration-base rev", "Revision to branch integration runs from, default origin/main"},
+		{"--fresh", "Remove jrdev worktrees and agent-queue/* branches; do not resume a prior integration run"},
 		{"--agent path", "Cursor agent binary; default is agent on PATH"},
 		{"--agent-model name", "Cursor agent --model; default " + jrdev.DefaultAgentModel},
 		{"--agent-permissions file", "Cursor permission JSON (jrdev format); if unset, uses <repo>/.cursor/" + jrdev.ProjectCursorCLIConfigName + " when present, else " + jrdev.DefaultAgentPermissionsName + " beside the binary"},

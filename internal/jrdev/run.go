@@ -2,6 +2,7 @@ package jrdev
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -65,15 +66,55 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 	if err := git.FetchOrigin(); err != nil {
 		return err
 	}
+
+	workRootAbs, err := filepath.Abs(workRoot)
+	if err != nil {
+		return err
+	}
+
+	if cfg.FreshStart {
+		vlog(cfg, log, "jrdev: verbose: --fresh: clearing jrdev worktrees under %q and agent-queue branches\n", workRootAbs)
+		if err := git.CleanupJrdevWorkstate(workRootAbs); err != nil {
+			return err
+		}
+	}
+
+	var integrationBranch, intPath string
+	if !cfg.FreshStart {
+		if b, p, ok, err := git.FindResumableIntegrationWorktree(workRootAbs); err != nil {
+			return err
+		} else if ok {
+			resume := true
+			if StdinIsInteractive() {
+				resume, err = PromptResumeOrCleanIntegration(os.Stdin, os.Stderr, b, p)
+				if err != nil {
+					return err
+				}
+			} else {
+				log("jrdev: resuming existing integration %q (non-interactive stdin; use --fresh for a clean run)\n", b)
+			}
+			if resume {
+				integrationBranch, intPath = b, p
+				vlog(cfg, log, "jrdev: verbose: resuming integration worktree %q\n", intPath)
+			} else {
+				vlog(cfg, log, "jrdev: verbose: fresh start selected — cleaning jrdev workstate\n")
+				if err := git.CleanupJrdevWorkstate(workRootAbs); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
 	base := cfg.Integration
 	if base == "" {
 		base = "origin/main"
 	}
-	vlog(cfg, log, "jrdev: verbose: creating integration branch from base %q\n", base)
-
-	integrationBranch, intPath, err := git.CreateIntegrationBranchAndWorktree(workRoot, base)
-	if err != nil {
-		return err
+	if integrationBranch == "" {
+		vlog(cfg, log, "jrdev: verbose: creating integration branch from base %q\n", base)
+		integrationBranch, intPath, err = git.CreateIntegrationBranchAndWorktree(workRoot, base)
+		if err != nil {
+			return err
+		}
 	}
 	log("jrdev: integration branch %s → worktree %s\n", integrationBranch, intPath)
 

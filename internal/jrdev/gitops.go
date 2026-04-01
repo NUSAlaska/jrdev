@@ -168,22 +168,25 @@ func (g GitOps) branchExists(branch string) bool {
 	return true
 }
 
-// worktreePathsForBranchRef returns absolute worktree paths whose HEAD branch ref matches wantRef (e.g. refs/heads/foo/bar).
-func (g GitOps) worktreePathsForBranchRef(wantRef string) ([]string, error) {
-	out, err := g.gitOutput("worktree", "list", "--porcelain")
-	if err != nil {
-		return nil, err
-	}
-	var paths []string
-	var curPath, curBranch string
+// WorktreeListEntry is one block from `git worktree list --porcelain`.
+type WorktreeListEntry struct {
+	Path       string // absolute path from git
+	BranchRef  string // e.g. refs/heads/main; empty if detached or before first branch line
+	Prunable   bool
+	IsMainWork bool // first block is the primary worktree
+}
+
+func parseWorktreeListPorcelain(out string) []WorktreeListEntry {
+	var entries []WorktreeListEntry
+	var cur *WorktreeListEntry
 	flush := func() {
-		if curPath == "" {
+		if cur == nil {
 			return
 		}
-		if curBranch == wantRef {
-			paths = append(paths, curPath)
+		if cur.Path != "" {
+			entries = append(entries, *cur)
 		}
-		curPath, curBranch = "", ""
+		cur = nil
 	}
 	for _, line := range strings.Split(out, "\n") {
 		if line == "" {
@@ -192,14 +195,48 @@ func (g GitOps) worktreePathsForBranchRef(wantRef string) ([]string, error) {
 		}
 		if strings.HasPrefix(line, "worktree ") {
 			flush()
-			curPath = strings.Trim(strings.TrimPrefix(line, "worktree "), `"`)
+			p := strings.Trim(strings.TrimPrefix(line, "worktree "), `"`)
+			cur = &WorktreeListEntry{Path: p}
+			if len(entries) == 0 {
+				cur.IsMainWork = true
+			}
 			continue
 		}
-		if strings.HasPrefix(line, "branch ") {
-			curBranch = strings.TrimSpace(strings.TrimPrefix(line, "branch "))
+		if cur == nil {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(line, "branch "):
+			cur.BranchRef = strings.TrimSpace(strings.TrimPrefix(line, "branch "))
+		case line == "prunable gitdir file points to non-existent location":
+			cur.Prunable = true
 		}
 	}
 	flush()
+	return entries
+}
+
+// ListWorktreeEntries runs git worktree list --porcelain and parses it.
+func (g GitOps) ListWorktreeEntries() ([]WorktreeListEntry, error) {
+	out, err := g.gitOutput("worktree", "list", "--porcelain")
+	if err != nil {
+		return nil, err
+	}
+	return parseWorktreeListPorcelain(out), nil
+}
+
+// worktreePathsForBranchRef returns absolute worktree paths whose HEAD branch ref matches wantRef (e.g. refs/heads/foo/bar).
+func (g GitOps) worktreePathsForBranchRef(wantRef string) ([]string, error) {
+	entries, err := g.ListWorktreeEntries()
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, e := range entries {
+		if e.BranchRef == wantRef {
+			paths = append(paths, e.Path)
+		}
+	}
 	return paths, nil
 }
 
