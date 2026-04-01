@@ -327,9 +327,8 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 
 	prCreated := false
 	if !cfg.SkipPR {
-		title := fmt.Sprintf("jrdev: agent-queue integration %s", integrationBranch)
-		body := fmt.Sprintf("Automated integration branch %q.\n\nLabel %q was processed by jrdev.", integrationBranch, cfg.Label)
-		vlog(cfg, log, "jrdev: verbose: gh pr create base=main head=%q\n", integrationBranch)
+		title, body := PullRequestTitleAndBody(cfg, agent, log, prompts, intPath, integrationBranch)
+		vlog(cfg, log, "jrdev: verbose: gh pr create base=main head=%q title=%q\n", integrationBranch, title)
 		if err := CreatePullRequest(cfg, title, body, integrationBranch); err != nil {
 			return err
 		}

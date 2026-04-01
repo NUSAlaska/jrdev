@@ -14,7 +14,7 @@ import (
 	"github.com/NUSAlaska/jrdev/internal/jrdev"
 )
 
-//go:embed prompt_plan.md prompt_implement.md prompt_review.md prompt_merge.md
+//go:embed prompt_plan.md prompt_implement.md prompt_review.md prompt_merge.md prompt_pr.md
 var promptFS embed.FS
 
 func main() {
@@ -157,7 +157,11 @@ func loadPrompts() (jrdev.PromptBundle, error) {
 	if err != nil {
 		return jrdev.PromptBundle{}, err
 	}
-	return jrdev.PromptBundle{Plan: plan, Implement: impl, Review: rev, Merge: mer}, nil
+	pr, err := read("prompt_pr.md")
+	if err != nil {
+		return jrdev.PromptBundle{}, err
+	}
+	return jrdev.PromptBundle{Plan: plan, Implement: impl, Review: rev, Merge: mer, PR: pr}, nil
 }
 
 func programName() string {

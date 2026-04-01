@@ -40,6 +40,15 @@ type MergePromptData struct {
 	GitDiff           string // git diff main..HEAD in agent cwd
 }
 
+// PRPromptData is passed to the pull-request description template.
+type PRPromptData struct {
+	IntegrationBranch string
+	QueueLabel        string
+	PRBase            string // compare branch for the PR (e.g. main)
+	CommitHistory     string
+	GitDiff           string
+}
+
 // Render treats body as a Go text/template with the given name for errors.
 func Render(name, body string, data any) (string, error) {
 	tmpl, err := template.New(name).Parse(body)
