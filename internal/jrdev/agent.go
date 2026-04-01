@@ -6,6 +6,9 @@ import (
 	"os/exec"
 )
 
+// DefaultAgentModel is used when Config.AgentModel is empty.
+const DefaultAgentModel = "composer-2-fast"
+
 // AgentRunOptions configures a single agent invocation.
 type AgentRunOptions struct {
 	Print bool // pass -p / --print for non-interactive
@@ -27,7 +30,11 @@ func (r OSAgentRunner) Run(cfg Config, dir string, prompt string, opts AgentRunO
 	if bin == "" {
 		bin = "agent"
 	}
-	args := []string{}
+	model := cfg.AgentModel
+	if model == "" {
+		model = DefaultAgentModel
+	}
+	args := []string{"--model", model}
 	if opts.Print {
 		args = append(args, "-p", prompt, "--output-format", "text")
 	} else {

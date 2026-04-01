@@ -121,6 +121,7 @@ After `go install .`, replace `go run .` with **`jrdev`** (or **`jrdev.exe`**) o
 | `--max-iterations` | `2N+3` | Outer loop cap |
 | `--integration-base` | `origin/main` | Base ref for new `agent-queue/run-…` branch |
 | `--agent` | `agent` on PATH | Cursor agent binary |
+| `--agent-model` | `composer-2-fast` | Value passed to Cursor agent as `--model` |
 | `--gh` | `gh` | GitHub CLI binary |
 | `-v` | off | Verbose agent/subprocess logging |
 | `-help`, `-h` | — | Print usage and exit |

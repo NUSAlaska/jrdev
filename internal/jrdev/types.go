@@ -25,6 +25,7 @@ type Config struct {
 	MaxIters    int // 0 means use default 2N+3
 	Verbose     bool
 	AgentBin    string
+	AgentModel  string // Cursor --model (default DefaultAgentModel)
 	GhBin       string
 	Integration string // rev for new integration branch, default "origin/main"
 }

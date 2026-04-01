@@ -40,6 +40,7 @@ func run() int {
 	verbose := flag.Bool("v", false, "verbose logging")
 	integrationBase := flag.String("integration-base", "origin/main", "rev to branch integration run from")
 	agentBin := flag.String("agent", "", "Cursor agent binary (default: agent on PATH)")
+	agentModel := flag.String("agent-model", jrdev.DefaultAgentModel, "Cursor agent --model name")
 	ghBin := flag.String("gh", "gh", "GitHub CLI binary")
 	var showHelp bool
 	flag.BoolVar(&showHelp, "help", false, "show usage and exit")
@@ -86,6 +87,7 @@ func run() int {
 		MaxIters:    *maxIter,
 		Verbose:     *verbose,
 		AgentBin:    *agentBin,
+		AgentModel:  *agentModel,
 		GhBin:       *ghBin,
 		Integration: *integrationBase,
 	}
@@ -162,6 +164,7 @@ func usage(name string, w io.Writer) {
 		{"-v", "Verbose logging (agent and subprocess output)"},
 		{"--integration-base rev", "Revision to branch integration runs from, default origin/main"},
 		{"--agent path", "Cursor agent binary; default is agent on PATH"},
+		{"--agent-model name", "Cursor agent --model; default " + jrdev.DefaultAgentModel},
 		{"--gh path", "GitHub CLI binary, default gh"},
 		{"-h, -help", "Show this help and exit"},
 	}
