@@ -229,9 +229,9 @@ Every Cursor **`agent`** invocation **`jrdev`** launches (preflight smoke, plan,
 | **`.jrdev/agent-runs/<timestamp>-<pid>/prompt.md`** | Exact prompt text passed to the agent (via `-p` pointing at this path, relative to that cwd). |
 | **`.jrdev/agent-runs/<timestamp>-<pid>/output.md`** | Everything the agent process printed (success or failure). |
 
-The first time artifacts are written in a given worktree, **`jrdev`** creates **`.jrdev/.gitignore`** so **`agent-runs/`** is ignored by Git in that tree. If your **`--worktrees`** directory is already gitignored (recommended), those paths usually stay hidden from **`git status`** entirely.
+The first time artifacts are written in a given worktree, **`jrdev`** creates **`.jrdev/.gitignore`** listing **`agent-runs/`** only, so prompts and transcripts under **`.jrdev/agent-runs/`** stay ignored while **`.jrdev/config.yaml`** can remain tracked. If your **`--worktrees`** directory is already gitignored (recommended), those paths usually stay hidden from **`git status`** entirely.
 
-If you run preflight from the **repo root** and **`--worktrees`** is not under an ignored path, consider adding **`.jrdev/`** to your **repository root** `.gitignore` so local transcripts (and the nested `.gitignore`) never clutter **`git status`**.
+If you run from the **repo root** and **`--worktrees`** is not under an ignored path, add **`.jrdev/agent-runs/`** to your **repository root** `.gitignore` (not all of **`.jrdev/`**—you normally want **`config.yaml`** commit-visible).
 
 With **`-v` / `--verbose`**, logs include the artifact directory for each agent run—useful to open the matching **`prompt.md`** and **`output.md`** after a failure.
 

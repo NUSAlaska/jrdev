@@ -17,7 +17,7 @@ Merge issue branch **`{{.IssueBranch}}`** into the current integration branch (`
 
 ## When integration checks fail (machine-readable signal)
 
-If you cannot get the listed **integration** commands to pass after a honest attempt (and the merge itself is already done in this worktree), **jrdev** needs a deterministic signal:
+If you cannot get the listed **integration** commands to pass after an honest attempt (and the merge itself is already done in this worktree), **jrdev** needs a deterministic signal:
 
 - Print **exactly one line** that starts with `JRDEV_INTEGRATION_BLOCKED:` (prefix must be at the beginning of the line after normal trimming). You may add a short human-readable reason after the colon.
 - You must still finish with **`COMPLETE`** on its own line as below so the merge phase is recognized as finished.
