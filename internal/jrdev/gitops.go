@@ -304,6 +304,16 @@ func MergeBranchInDir(workDir, branch string) error {
 	return nil
 }
 
+// ResetHardToORIG_HEAD runs git reset --hard ORIG_HEAD in workDir (undoes the last merge on HEAD).
+func ResetHardToORIG_HEAD(workDir string) error {
+	c := exec.Command("git", "-C", workDir, "reset", "--hard", "ORIG_HEAD")
+	out, err := c.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git reset --hard ORIG_HEAD: %w\n%s", err, out)
+	}
+	return nil
+}
+
 // GoVetTest runs go vet ./... and go test ./... in dir.
 func GoVetTest(dir string) error {
 	vet := exec.Command("go", "vet", "./...")

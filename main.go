@@ -51,6 +51,7 @@ func run() int {
 	integrationBase := flag.String("integration-base", "origin/main", "rev to branch integration run from")
 	fresh := flag.Bool("fresh", false, "discard prior jrdev worktrees/branches (--worktrees + agent-queue/*); skip resume prompt")
 	configPath := flag.String("config", "", "repository jrdev YAML (default: <repo>/.jrdev/config.yaml)")
+	integrationBlocked := flag.String("integration-blocked", "", "when merge agent prints JRDEV_INTEGRATION_BLOCKED — force abort or merge (waive); overrides meta; empty uses meta.integration_blocked_action or prompt/default")
 	agentBin := flag.String("agent", "", "Cursor agent binary (default: agent on PATH)")
 	agentModel := flag.String("agent-model", jrdev.DefaultAgentModel, "Cursor agent --model name")
 	agentCursorDir := flag.String("agent-cursor-config-dir", "", "set CURSOR_CONFIG_DIR to this path (must contain cli-config.json); see Cursor CLI configuration docs")
@@ -69,6 +70,14 @@ func run() int {
 	if *agentCursorDir != "" && *agentPermissions != "" {
 		fmt.Fprintf(os.Stderr, "jrdev: choose at most one of --agent-cursor-config-dir and --agent-permissions\n")
 		return 1
+	}
+	if s := strings.TrimSpace(*integrationBlocked); s != "" {
+		switch strings.ToLower(s) {
+		case "abort", "merge":
+		default:
+			fmt.Fprintf(os.Stderr, "jrdev: --integration-blocked must be abort or merge\n")
+			return 1
+		}
 	}
 
 	startDir, err := os.Getwd()
@@ -211,6 +220,7 @@ func run() int {
 		FreshStart:           *fresh,
 		Project:              projectCfg,
 		ProjectPath:          cfgYAML,
+		IntegrationBlocked:   strings.TrimSpace(*integrationBlocked),
 	}
 
 	log := func(format string, args ...any) {
@@ -291,6 +301,7 @@ func usage(name string, w io.Writer) {
 		{"-v, --verbose", "Verbose logging (preflight steps, loop phases, agent argv, git/gh subprocess output)"},
 		{"--integration-base rev", "Revision to branch integration runs from, default origin/main"},
 		{"--config path", "Repository jrdev YAML; default <repo>/.jrdev/config.yaml"},
+		{"--integration-blocked abort|merge", "When merge agent emits JRDEV_INTEGRATION_BLOCKED — force stop or waive (overrides meta); default non-interactive is abort unless meta sets integration_blocked_action"},
 		{"--fresh", "Remove jrdev worktrees and agent-queue/* branches; do not resume a prior integration run"},
 		{"--agent path", "Cursor agent binary; default is agent on PATH"},
 		{"--agent-model name", "Cursor agent --model; default " + jrdev.DefaultAgentModel},

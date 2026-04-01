@@ -291,13 +291,29 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 			}
 			return Render("merge", prompts.Merge, mergeData)
 		}
-		if _, err := runAgentUntilComplete(cfg, agent, log, "merge", intPath, renderMerge); err != nil {
+		mergeOut, err := runAgentUntilComplete(cfg, agent, log, "merge", intPath, renderMerge)
+		if err != nil {
 			return fmt.Errorf("merge phase: %w", err)
 		}
-		merged, err := BranchMergedIntoHead(intPath, job.Branch)
+		mergedAfterAgent, err := BranchMergedIntoHead(intPath, job.Branch)
 		if err != nil {
 			return err
 		}
+		if blocked, ibReason := IntegrationBlockedFromStdout(mergeOut); blocked {
+			waive, err := ResolveIntegrationBlockedDecision(cfg, os.Stdin, os.Stderr, log, ibReason, StdinIsInteractive())
+			if err != nil {
+				return err
+			}
+			if !waive {
+				if mergedAfterAgent {
+					if rerr := ResetHardToORIG_HEAD(intPath); rerr != nil {
+						log("jrdev: warning: integration abort could not reset worktree: %v\n", rerr)
+					}
+				}
+				return fmt.Errorf("jrdev: integration blocked — aborted (issue #%d left open)", job.Number)
+			}
+		}
+		merged := mergedAfterAgent
 		vlog(cfg, log, "jrdev: verbose: branch %q already merged into integration HEAD: %v\n", job.Branch, merged)
 		if !merged {
 			vlog(cfg, log, "jrdev: verbose: git merge %q into integration at %s\n", job.Branch, intPath)

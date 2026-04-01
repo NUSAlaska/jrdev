@@ -43,4 +43,7 @@ type Config struct {
 	// Project is parsed from ProjectPath (.jrdev/config.yaml by default); required before the pipeline runs.
 	Project     ProjectConfig
 	ProjectPath string
+	// IntegrationBlocked, when "abort" or "merge", forces the decision when merge stdout contains
+	// IntegrationBlockedLinePrefix; overrides meta. Empty uses meta, then prompt or default abort.
+	IntegrationBlocked string
 }
