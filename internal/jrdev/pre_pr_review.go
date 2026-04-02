@@ -17,6 +17,7 @@ const PrePrReviewArtifactsRoot = "pre-pr-review"
 const (
 	prePRReviewMaxCycles = 3
 	pass2HandoffFenceTag = "jrdev-pre-pr-review-handoff"
+	pass3ArtifactFenceTag = "jrdev-pre-pr-review-pass3"
 )
 
 // PrePRPass2Handoff is the JSON inside the pass-2 handoff fence (GM-012 / session handoff).
@@ -38,6 +39,16 @@ type PrePRSessionHandoff struct {
 	ConflictNotes string `json:"conflictNotes"`
 	FinalRound    int    `json:"finalRound"`
 	MatrixHadGaps bool   `json:"matrixHadGapsAtEnd"`
+}
+
+// PrePRPass3Artifact is the JSON inside the pass-3 artifact fence (GM-008).
+type PrePRPass3Artifact struct {
+	Summary             string `json:"summary"`
+	TestDesign          string `json:"testDesign"`
+	Coverage            string `json:"coverage"`
+	PRDTestingAlignment string `json:"prdTestingAlignment"`
+	StrictnessInference string `json:"strictnessInference"`
+	FollowUps           string `json:"followUps"`
 }
 
 func newPrePRRunID() (string, error) {
@@ -140,6 +151,37 @@ func parsePass2Handoff(agentOut string) (h PrePRPass2Handoff, rawInner string, p
 	return hh, rawInner, ""
 }
 
+func parsePass3Artifact(agentOut string) (a PrePRPass3Artifact, rawInner string, parseErr string) {
+	inner, err := ExtractSingleMarkdownFence(pass3ArtifactFenceTag, agentOut)
+	if err != nil {
+		return PrePRPass3Artifact{}, "", err.Error()
+	}
+	rawInner = inner
+	var aa PrePRPass3Artifact
+	if err := json.Unmarshal([]byte(inner), &aa); err != nil {
+		return PrePRPass3Artifact{}, rawInner, err.Error()
+	}
+	return aa, rawInner, ""
+}
+
+func writePass3Artifact(artDir string, finalRound int, artifact PrePRPass3Artifact, rawFenceInner string, parseErr string) error {
+	type wrap struct {
+		FinalRound         int                `json:"finalRound"`
+		Artifact           PrePRPass3Artifact `json:"artifact"`
+		ArtifactRaw        string             `json:"artifactFenceInner,omitempty"`
+		ArtifactParseError string             `json:"artifactParseError,omitempty"`
+	}
+	w := wrap{FinalRound: finalRound, Artifact: artifact, ArtifactRaw: rawFenceInner, ArtifactParseError: parseErr}
+	if parseErr == "" {
+		w.ArtifactRaw = ""
+	}
+	b, err := json.MarshalIndent(w, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(artDir, "pass-3.json"), b, 0o644)
+}
+
 func readBonusSteeringNote() (string, error) {
 	if StdinIsInteractive() {
 		fmt.Fprintf(os.Stderr, "jrdev: pre-pr-review: matrix still has gaps after %d cycles — enter a short steering note for one bonus Pass 1→2 cycle: ", prePRReviewMaxCycles)
@@ -181,7 +223,7 @@ func mergeSessionHandoff(last PrePRPass2Handoff, finalRound int, matrixHadGaps b
 	}
 }
 
-// RunPrePrReview executes discovery, Pass 1 ↔ Pass 2 loops, artifacts, and session handoff (GM-007, GM-012, GM-014).
+// RunPrePrReview executes discovery, Pass 1 ↔ Pass 2 loops, Pass 3 test-design review, artifacts, and session handoff (GM-007, GM-008, GM-012, GM-014).
 func RunPrePrReview(cfg Config, prompts PromptBundle, agent AgentRunner, workDir string, log func(string, ...any)) error {
 	if log == nil {
 		log = func(string, ...any) {}
@@ -191,6 +233,9 @@ func RunPrePrReview(cfg Config, prompts PromptBundle, agent AgentRunner, workDir
 	}
 	if strings.TrimSpace(prompts.PrePRReviewPass2) == "" {
 		return fmt.Errorf("jrdev: embedded pre-pr-review pass 2 prompt is empty")
+	}
+	if strings.TrimSpace(prompts.PrePRReviewPass3) == "" {
+		return fmt.Errorf("jrdev: embedded pre-pr-review pass 3 prompt is empty")
 	}
 	workDir, err := filepath.Abs(workDir)
 	if err != nil {
@@ -415,5 +460,51 @@ finalize:
 		return err
 	}
 	log("jrdev: pre-pr-review: session complete (runId=%s); wrote handoff.json and pass 1↔2 artifacts under %s\n", runID, artDir)
+
+	priorAll, err := formatPriorPassArtifacts(artDir, finalRound)
+	if err != nil {
+		return err
+	}
+	commitHist3, err := CommitHistoryForPrompt(workDir)
+	if err != nil {
+		return err
+	}
+	diff3, err := GitDiffForPromptFromBase(workDir, integrationBase)
+	if err != nil {
+		return err
+	}
+	pass3Data := PrePRReviewPass3PromptData{
+		IntegrationBranch:          branch,
+		IntegrationBase:            integrationBase,
+		IssueNumbers:               issueNums,
+		IssuesMarkdown:             issuesMD,
+		CommitHistory:              commitHist3,
+		GitDiff:                    diff3,
+		NonInteractive:             !StdinIsInteractive(),
+		PriorPassArtifactsMarkdown: priorAll,
+		SessionHandoffJSON:         strings.TrimSpace(string(sb)),
+		FinalRound:                 finalRound,
+	}
+	pass3Body, err := Render("pre-pr-review pass3", prompts.PrePRReviewPass3, pass3Data)
+	if err != nil {
+		return err
+	}
+	pass3Out, err := runAgentUntilComplete(cfg, agent, log, "pre-pr-review pass3", workDir, func() (string, error) {
+		return pass3Body, nil
+	}, agentPrint)
+	if err != nil {
+		return err
+	}
+	p3, raw3, p3err := parsePass3Artifact(pass3Out)
+	if p3err != "" {
+		log("jrdev: pre-pr-review: Pass 3 artifact: %s\n", p3err)
+	}
+	if err := writePass3Artifact(artDir, finalRound, p3, raw3, p3err); err != nil {
+		return err
+	}
+	log("jrdev: pre-pr-review: Pass 3 artifact written (pass-3.json)\n")
+	if err := RequireGitWorkingTreeClean(workDir); err != nil {
+		return err
+	}
 	return nil
 }

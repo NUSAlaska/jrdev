@@ -87,6 +87,20 @@ type PrePRReviewPass2PromptData struct {
 	CurrentPass1MatrixJSON     string // indented JSON from validated matrix this round
 }
 
+// PrePRReviewPass3PromptData is passed to prompt_pre_pr_review_pass3.md (GM-008 — no lint/unit in prompt).
+type PrePRReviewPass3PromptData struct {
+	IntegrationBranch          string
+	IntegrationBase            string
+	IssueNumbers               []int
+	IssuesMarkdown             string
+	CommitHistory              string
+	GitDiff                    string
+	NonInteractive             bool
+	PriorPassArtifactsMarkdown string
+	SessionHandoffJSON         string // raw JSON from handoff.json (pretty optional; passed as string)
+	FinalRound                 int
+}
+
 // Render treats body as a Go text/template with the given name for errors.
 func Render(name, body string, data any) (string, error) {
 	tmpl, err := template.New(name).Parse(body)

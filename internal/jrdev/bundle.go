@@ -9,4 +9,5 @@ type PromptBundle struct {
 	PR                string // optional; empty skips agent-generated PR title/body
 	PrePRReviewPass1  string
 	PrePRReviewPass2  string
+	PrePRReviewPass3  string
 }

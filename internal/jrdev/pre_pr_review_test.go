@@ -99,6 +99,39 @@ func TestParsePass2Handoff_invalidJSON(t *testing.T) {
 	}
 }
 
+func TestParsePass3Artifact_valid(t *testing.T) {
+	raw := `{"summary":"s","testDesign":"td","coverage":"c","prdTestingAlignment":"p","strictnessInference":"i","followUps":"f"}`
+	out := "intro\n```" + pass3ArtifactFenceTag + "\n" + raw + "\n```\nCOMPLETE\n"
+	a, inner, perr := parsePass3Artifact(out)
+	if perr != "" {
+		t.Fatalf("parseErr: %s", perr)
+	}
+	if inner != raw {
+		t.Fatalf("inner=%q", inner)
+	}
+	if a.Summary != "s" || a.TestDesign != "td" || a.FollowUps != "f" {
+		t.Fatalf("%+v", a)
+	}
+}
+
+func TestParsePass3Artifact_noFence(t *testing.T) {
+	_, _, perr := parsePass3Artifact("no fence")
+	if perr == "" {
+		t.Fatal("expected error")
+	}
+}
+
+func TestParsePass3Artifact_invalidJSON(t *testing.T) {
+	out := "```" + pass3ArtifactFenceTag + "\nnot-json\n```"
+	_, raw, perr := parsePass3Artifact(out)
+	if perr == "" {
+		t.Fatal("expected JSON error")
+	}
+	if raw != "not-json" {
+		t.Fatalf("raw=%q", raw)
+	}
+}
+
 func TestMergeSessionHandoff_trimsAndFlags(t *testing.T) {
 	last := PrePRPass2Handoff{
 		DraftPRTitle:  "  t  ",
