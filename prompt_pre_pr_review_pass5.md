@@ -2,7 +2,7 @@
 
 You are in the **integration git worktree** on branch **`{{.IntegrationBranch}}`**.
 
-jrdev ran **Pass 4** (`lint` → `unit` → `integration` from `.jrdev/config.yaml`) and stopped at the **first failing command**. You receive **only the captured stdout/stderr below** — **do not** assume you must re-run the full suite inside this session (GM-010).
+jrdev ran **Pass 4** (`lint` → `unit` → `integration` from `.jrdev/config.yaml`) and stopped at the **first failing command**. You receive **only the captured stdout/stderr below** — **do not** assume you must re-run the full suite inside this session.
 
 ## Failure summary
 
@@ -17,7 +17,7 @@ jrdev ran **Pass 4** (`lint` → `unit` → `integration` from `.jrdev/config.ya
 {{.CapturedLogs}}
 ```
 
-## GM-010 — test and fix rules
+## Test and fix rules
 
 - You **may** change **product code** and **lint** issues.
 - **Test edits** are limited to **mechanical** fixes (imports, compile breaks, small helpers) and **snapshot/golden updates** when the **product** change is already **PRD-correct**.
@@ -41,7 +41,7 @@ Standard input is **not** a TTY. **Do not** wait for user input. Use best judgme
 
 1. Diagnose the failure using **only** the logs and by **reading relevant source/tests** in the repo.
 2. Apply minimal, PRD-aligned fixes. Prefer product fixes over test hacks.
-3. **`go vet` / `go test` / configured commands**: you **may** run narrow commands locally if needed to validate edits — jrdev does not require you to re-run the full pipeline.
+3. **configured testing commands**: you **may** run narrow commands locally if needed to validate edits — jrdev does not require you to re-run the full pipeline.
 4. Use commit messages prefixed with **`JRDEV: Pre-PR review pass 5 -`** for any commits.
 5. Leave a **clean working tree** (commit meaningful work, or **no** changes). If you make **no** commits, end with **`COMPLETE NO COMMIT`** on its own line; otherwise end with **`COMPLETE`**.
 

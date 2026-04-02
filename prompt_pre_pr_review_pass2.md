@@ -67,7 +67,7 @@ Diff ({{.IntegrationBase}}..HEAD):
 
 {{.UnitTests}}
 
-## Task (GM-007 — gap fixes)
+## Task (gap fixes)
 
 1. Prioritize rows with `not_satisfied`, then `conflict`, then `unknown`.
 2. Make **minimal** code or test changes that move requirements toward **satisfied** with real evidence. **Do not** broaden scope beyond the linked issues / matrix.
@@ -79,7 +79,7 @@ Diff ({{.IntegrationBase}}..HEAD):
    - **`round`**: integer, must match **{{.Round}}**
    - **`gapSummary`**: short description of what you fixed or punted
    - **`matrixDelta`**: free text describing how the branch state moved relative to the matrix (tests, files, decisions)
-   - **`draftPRTitle`**: suggested PR title for the integration branch (for the human PR author step / GM-012)
+   - **`draftPRTitle`**: suggested PR title for the integration branch (for the human PR author; merged into session handoff)
    - **`draftPRBody`**: suggested PR body (markdown plain text inside the JSON string)
    - **`gapNotes`**: remaining gaps or follow-ups for the author
    - **`conflictNotes`**: notable conflicts or ambiguities still open

@@ -1,8 +1,8 @@
 # jrdev — Pre-PR review — Pass 3 (test design, no check execution)
 
-You are in the **integration git worktree** on branch **`{{.IntegrationBranch}}`**. This is **Pass 3 only**: review **test design**, **coverage**, and **alignment** with **PRD testing expectations** and **project-wide test strictness** inferred from **existing tests** (read source; **GM-008**).
+You are in the **integration git worktree** on branch **`{{.IntegrationBranch}}`**. This is **Pass 3 only**: review **test design**, **coverage**, and **alignment** with **PRD testing expectations** and **project-wide test strictness** inferred from **existing tests** (read source only; **do not run** the checks in `.jrdev/config.yaml`).
 
-## GM-008 — no lint/unit/integration execution
+## No lint/unit/integration execution
 
 **Do not** run the repository’s configured **lint**, **unit**, or **integration** commands, and **do not** ask the operator to run them for you during this pass. jrdev does **not** trigger those commands in Pass 3. Base judgments on **static review** of code and tests (read files, compare patterns, trace requirements from issues/PRD text).
 

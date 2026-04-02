@@ -60,7 +60,7 @@ Diff ({{.IntegrationBase}}..HEAD):
 
 {{.UnitTests}}
 
-## Task (GM-005 / grill-me matrix)
+## Task (requirements matrix)
 
 1. Treat each issue body as the **primary requirements substrate**: infer **atomic requirements** from headings, bullets, user stories, tables, checklists, or prose — even when wording is informal.
 2. For **each** atomic requirement row:
