@@ -2,3 +2,4 @@
 .jrdev/agent-runs/
 
 dist/*
+.cursor/*
