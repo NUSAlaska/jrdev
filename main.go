@@ -327,7 +327,7 @@ func usage(name string, w io.Writer) {
 	fmt.Fprintf(&b, "Syntax:\n")
 	fmt.Fprintf(&b, "  %s [flags]\n", name)
 	fmt.Fprintf(&b, "  %s init [flags]   interactive setup wizard for .jrdev/config.yaml\n", name)
-		fmt.Fprintf(&b, "  %s pre-pr-review [flags]   issue discovery + Pass 1↔2 loop + Pass 3 test-design review on integration branch checkout\n", name)
+	fmt.Fprintf(&b, "  %s pre-pr-review [flags]   issue discovery + Pass 1↔2 loop + Pass 3 test-design review on integration branch checkout\n", name)
 	fmt.Fprintf(&b, "  %s help\n", name)
 	fmt.Fprintf(&b, "  %s -h | -help | --help\n\n", name)
 	fmt.Fprintf(&b, "Typical calls:\n")

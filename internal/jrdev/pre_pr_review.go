@@ -15,8 +15,8 @@ import (
 const PrePrReviewArtifactsRoot = "pre-pr-review"
 
 const (
-	prePRReviewMaxCycles = 3
-	pass2HandoffFenceTag = "jrdev-pre-pr-review-handoff"
+	prePRReviewMaxCycles  = 3
+	pass2HandoffFenceTag  = "jrdev-pre-pr-review-handoff"
 	pass3ArtifactFenceTag = "jrdev-pre-pr-review-pass3"
 )
 
@@ -313,8 +313,8 @@ func RunPrePrReview(cfg Config, prompts PromptBundle, agent AgentRunner, workDir
 			IssuesMarkdown:             issuesMD,
 			CommitHistory:              commitHist,
 			GitDiff:                    diff,
-			LintTests:                    PromptLintTests(proj),
-			UnitTests:                    PromptUnitTests(proj),
+			LintTests:                  PromptLintTests(proj),
+			UnitTests:                  PromptUnitTests(proj),
 			NonInteractive:             !StdinIsInteractive(),
 			PriorPassArtifactsMarkdown: priorMD,
 			BonusSteeringNote:          strings.TrimSpace(bonusSteering),
@@ -382,8 +382,8 @@ func RunPrePrReview(cfg Config, prompts PromptBundle, agent AgentRunner, workDir
 			IssuesMarkdown:             issuesMD,
 			CommitHistory:              commitHist,
 			GitDiff:                    diff,
-			LintTests:                    PromptLintTests(proj),
-			UnitTests:                    PromptUnitTests(proj),
+			LintTests:                  PromptLintTests(proj),
+			UnitTests:                  PromptUnitTests(proj),
 			NonInteractive:             !StdinIsInteractive(),
 			PriorPassArtifactsMarkdown: p2prior,
 			BonusSteeringNote:          strings.TrimSpace(bonusSteering),

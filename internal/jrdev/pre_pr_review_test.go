@@ -1,6 +1,7 @@
 package jrdev
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -129,6 +130,79 @@ func TestParsePass3Artifact_invalidJSON(t *testing.T) {
 	}
 	if raw != "not-json" {
 		t.Fatalf("raw=%q", raw)
+	}
+}
+
+func TestParsePass3Artifact_twoFences(t *testing.T) {
+	two := "```" + pass3ArtifactFenceTag + "\n{}\n```\n```" + pass3ArtifactFenceTag + "\n{}\n```"
+	_, _, perr := parsePass3Artifact(two)
+	if perr == "" || !strings.Contains(perr, "exactly one") {
+		t.Fatalf("got %q", perr)
+	}
+}
+
+func TestParsePass3Artifact_unclosedFence(t *testing.T) {
+	_, _, perr := parsePass3Artifact("```" + pass3ArtifactFenceTag + "\n{\"x\":1}\n")
+	if perr == "" || !strings.Contains(perr, "unclosed") {
+		t.Fatalf("expected unclosed fence error, got %q", perr)
+	}
+}
+
+func TestWritePass3Artifact_success(t *testing.T) {
+	tmp := t.TempDir()
+	art := PrePRPass3Artifact{
+		Summary:             "s",
+		TestDesign:          "td",
+		Coverage:            "c",
+		PRDTestingAlignment: "p",
+		StrictnessInference: "i",
+		FollowUps:           "f",
+	}
+	raw := `{"summary":"s","testDesign":"td"}`
+	if err := writePass3Artifact(tmp, 2, art, raw, ""); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(tmp, "pass-3.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var w struct {
+		FinalRound  int                `json:"finalRound"`
+		Artifact    PrePRPass3Artifact `json:"artifact"`
+		ArtifactRaw string             `json:"artifactFenceInner,omitempty"`
+		ParseErr    string             `json:"artifactParseError,omitempty"`
+	}
+	if err := json.Unmarshal(b, &w); err != nil {
+		t.Fatal(err)
+	}
+	if w.FinalRound != 2 || w.ArtifactRaw != "" || w.ParseErr != "" {
+		t.Fatalf("%+v", w)
+	}
+	if w.Artifact.Summary != "s" || w.Artifact.TestDesign != "td" {
+		t.Fatalf("%+v", w.Artifact)
+	}
+}
+
+func TestWritePass3Artifact_parseErrorPreservesRaw(t *testing.T) {
+	tmp := t.TempDir()
+	if err := writePass3Artifact(tmp, 1, PrePRPass3Artifact{}, "not-json", "invalid character"); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(tmp, "pass-3.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var w struct {
+		FinalRound int `json:"finalRound"`
+		Artifact   PrePRPass3Artifact
+		Raw        string `json:"artifactFenceInner,omitempty"`
+		ParseErr   string `json:"artifactParseError,omitempty"`
+	}
+	if err := json.Unmarshal(b, &w); err != nil {
+		t.Fatal(err)
+	}
+	if w.FinalRound != 1 || w.Raw != "not-json" || !strings.Contains(w.ParseErr, "invalid") {
+		t.Fatalf("finalRound=%d raw=%q err=%q", w.FinalRound, w.Raw, w.ParseErr)
 	}
 }
 
