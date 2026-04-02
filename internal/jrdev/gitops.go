@@ -284,14 +284,49 @@ func CommitHistoryForPrompt(workDir string) (string, error) {
 	return string(out), nil
 }
 
-// GitDiffForPrompt returns git diff main..HEAD text for prompt templates.
-func GitDiffForPrompt(workDir string) (string, error) {
-	c := exec.Command("git", "-C", workDir, "diff", "main..HEAD")
+// GitDiffForPromptFromBase returns git diff base..HEAD for prompt templates.
+// Empty base defaults to origin/main (same default as git-log issue discovery).
+func GitDiffForPromptFromBase(workDir, base string) (string, error) {
+	if strings.TrimSpace(base) == "" {
+		base = "origin/main"
+	}
+	rng := fmt.Sprintf("%s..HEAD", base)
+	c := exec.Command("git", "-C", workDir, "diff", rng)
 	out, err := c.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("git diff main..HEAD (prompt): %w\n%s", err, out)
+		return "", fmt.Errorf("git diff %s (prompt): %w\n%s", rng, err, out)
 	}
 	return string(out), nil
+}
+
+// GitDiffForPrompt returns git diff main..HEAD text for prompt templates.
+func GitDiffForPrompt(workDir string) (string, error) {
+	return GitDiffForPromptFromBase(workDir, "main")
+}
+
+// GitWorkingTreeClean reports whether git status --porcelain is empty in workDir (no staged/unstaged/untracked changes).
+func GitWorkingTreeClean(workDir string) (bool, error) {
+	c := exec.Command("git", "-C", workDir, "status", "--porcelain")
+	out, err := c.CombinedOutput()
+	if err != nil {
+		return false, fmt.Errorf("git status --porcelain: %w\n%s", err, out)
+	}
+	s := strings.TrimSpace(string(out))
+	return s == "", nil
+}
+
+// RequireGitWorkingTreeClean returns an error when the worktree is not clean, including porcelain output for debugging.
+func RequireGitWorkingTreeClean(workDir string) error {
+	ok, err := GitWorkingTreeClean(workDir)
+	if err != nil {
+		return err
+	}
+	if ok {
+		return nil
+	}
+	c := exec.Command("git", "-C", workDir, "status", "--porcelain")
+	out, _ := c.CombinedOutput()
+	return fmt.Errorf("jrdev pre-pr-review: working tree must be clean before advancing; git status --porcelain:\n%s", strings.TrimSpace(string(out)))
 }
 
 // MergeBranchInDir runs git merge branch --no-edit in workDir.

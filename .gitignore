@@ -1,4 +1,5 @@
 # Local agent run transcripts (preflight + worktrees)
 .jrdev/agent-runs/
+.jrdev/pre-pr-review/
 
 dist/*

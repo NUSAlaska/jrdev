@@ -26,7 +26,7 @@ func TestRunAgentUntilComplete(t *testing.T) {
 	_, err := runAgentUntilComplete(cfg, a, nil, "test", "/tmp", func() (string, error) {
 		renders++
 		return "prompt", nil
-	})
+	}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestRunAgentUntilComplete_exhausted(t *testing.T) {
 	cfg := Config{}
 	_, err := runAgentUntilComplete(cfg, a, nil, "test", "/tmp", func() (string, error) {
 		return "p", nil
-	})
+	}, true)
 	if err == nil || !strings.Contains(err.Error(), "never contained") {
 		t.Fatalf("expected exhaustion error, got %v", err)
 	}

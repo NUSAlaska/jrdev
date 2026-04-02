@@ -52,6 +52,71 @@ type PRPromptData struct {
 	PRBase            string // compare branch for the PR (e.g. main)
 	CommitHistory     string
 	GitDiff           string
+	// PrePRReview* optional context from .jrdev/pre-pr-review/latest (GM-012).
+	PrePRReviewHandoffPresent bool
+	PrePRReviewHandoffSummary string
+	PrePRReviewArtifactPaths  string // markdown list; empty when Present is false
+}
+
+// PrePRReviewPass1PromptData is passed to prompt_pre_pr_review_pass1.md.
+type PrePRReviewPass1PromptData struct {
+	IntegrationBranch string
+	IntegrationBase   string
+	IssueNumbers      []int
+	IssuesMarkdown    string // gh-fetched bodies + headings
+	CommitHistory     string
+	GitDiff           string
+	LintTests         string
+	UnitTests         string
+	NonInteractive    bool
+	PriorPassArtifactsMarkdown string // full serialized prior pass outputs (GM-007)
+	BonusSteeringNote          string // 4th cycle; interactive note or non-interactive best-judgment line
+	Round                      int    // 1-based pass number for this Pass 1 invocation
+}
+
+// PrePRReviewPass2PromptData is passed to prompt_pre_pr_review_pass2.md.
+type PrePRReviewPass2PromptData struct {
+	IntegrationBranch string
+	IntegrationBase   string
+	IssueNumbers      []int
+	IssuesMarkdown    string
+	CommitHistory     string
+	GitDiff           string
+	LintTests         string
+	UnitTests         string
+	NonInteractive    bool
+	PriorPassArtifactsMarkdown string
+	BonusSteeringNote          string
+	Round                      int
+	CurrentPass1MatrixJSON     string // indented JSON from validated matrix this round
+}
+
+// PrePRReviewPass3PromptData is passed to prompt_pre_pr_review_pass3.md (GM-008 — no lint/unit in prompt).
+type PrePRReviewPass3PromptData struct {
+	IntegrationBranch          string
+	IntegrationBase            string
+	IssueNumbers               []int
+	IssuesMarkdown             string
+	CommitHistory              string
+	GitDiff                    string
+	NonInteractive             bool
+	PriorPassArtifactsMarkdown string
+	SessionHandoffJSON         string // raw JSON from handoff.json (pretty optional; passed as string)
+	FinalRound                 int
+}
+
+// PrePRReviewPass5PromptData is passed to prompt_pre_pr_review_pass5.md (GM-010 — logs only from jrdev).
+type PrePRReviewPass5PromptData struct {
+	IntegrationBranch   string
+	IntegrationBase     string
+	IssueNumbers        []int
+	FailingKind         string // lint | unit | integration
+	FailingCommand      string
+	CapturedLogs        string
+	NonInteractive      bool
+	BonusSteeringNote   string
+	Pass5Round          int
+	Fingerprint         string
 }
 
 // Render treats body as a Go text/template with the given name for errors.
