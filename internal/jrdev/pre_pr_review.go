@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -748,4 +749,178 @@ finalize:
 		return err
 	}
 	return nil
+}
+
+// PRPromptPrePRReviewHandoff carries optional pre-pr-review context for prompt_pr.md (GM-012).
+type PRPromptPrePRReviewHandoff struct {
+	Present       bool
+	Summary       string // markdown fragment for the PR prompt
+	ArtifactPaths string // markdown bullet list of paths relative to repo root
+}
+
+type prPromptPass3File struct {
+	FinalRound int                `json:"finalRound"`
+	Artifact   PrePRPass3Artifact `json:"artifact"`
+}
+
+func buildPRPromptHandoffSummaryMarkdown(artDir, runID string) string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "**Pre-pr-review run ID:** `%s`\n\n", runID)
+
+	hPath := filepath.Join(artDir, "handoff.json")
+	raw, err := os.ReadFile(hPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			sb.WriteString("*Session handoff (`handoff.json`) is not present for this run.*\n\n")
+		} else {
+			fmt.Fprintf(&sb, "*Could not read handoff.json: %v*\n\n", err)
+		}
+	} else {
+		var sess PrePRSessionHandoff
+		if err := json.Unmarshal(raw, &sess); err != nil {
+			fmt.Fprintf(&sb, "*handoff.json is not valid JSON: %v*\n\n", err)
+		} else {
+			sb.WriteString("### Session handoff (Pass 1↔2)\n\n")
+			if t := strings.TrimSpace(sess.DraftPRTitle); t != "" {
+				fmt.Fprintf(&sb, "- **Draft PR title:** %s\n", t)
+			}
+			if b := strings.TrimSpace(sess.DraftPRBody); b != "" {
+				fmt.Fprintf(&sb, "- **Draft PR body:**\n\n%s\n\n", b)
+			}
+			if t := strings.TrimSpace(sess.GapNotes); t != "" {
+				fmt.Fprintf(&sb, "- **Gap notes:** %s\n", t)
+			}
+			if t := strings.TrimSpace(sess.ConflictNotes); t != "" {
+				fmt.Fprintf(&sb, "- **Conflict notes:** %s\n", t)
+			}
+			fmt.Fprintf(&sb, "- **Final Pass 1↔2 round:** %d — **matrix had gaps at end:** %v\n", sess.FinalRound, sess.MatrixHadGaps)
+			if t := strings.TrimSpace(sess.Pass5BadTestByDesign); t != "" {
+				fmt.Fprintf(&sb, "- **Pass 5 — bad test by design:** %s\n", t)
+			}
+			if t := strings.TrimSpace(sess.Pass5OperatorNotes); t != "" {
+				fmt.Fprintf(&sb, "- **Pass 5 — operator notes:** %s\n", t)
+			}
+			sb.WriteString("\n")
+		}
+	}
+
+	p3raw, err := os.ReadFile(filepath.Join(artDir, "pass-3.json"))
+	if err == nil {
+		var w prPromptPass3File
+		if err := json.Unmarshal(p3raw, &w); err != nil {
+			fmt.Fprintf(&sb, "*pass-3.json is not valid JSON: %v*\n\n", err)
+		} else {
+			a := w.Artifact
+			sb.WriteString("### Pass 3 — testing review\n\n")
+			add := func(label, val string) {
+				if strings.TrimSpace(val) != "" {
+					fmt.Fprintf(&sb, "- **%s:** %s\n", label, val)
+				}
+			}
+			add("Summary", a.Summary)
+			add("Test design", a.TestDesign)
+			add("Coverage", a.Coverage)
+			add("PRD testing alignment", a.PRDTestingAlignment)
+			add("Strictness inference", a.StrictnessInference)
+			add("Follow-ups", a.FollowUps)
+			sb.WriteString("\n")
+		}
+	}
+
+	p4raw, err := os.ReadFile(filepath.Join(artDir, "pass-4.json"))
+	if err == nil {
+		var f prePRPass4ArtifactFile
+		if err := json.Unmarshal(p4raw, &f); err != nil {
+			fmt.Fprintf(&sb, "*pass-4.json is not valid JSON: %v*\n", err)
+		} else {
+			sb.WriteString("### Pass 4 — configured checks\n\n")
+			fmt.Fprintf(&sb, "- **Final Pass 4 success:** %v\n", f.FinalPass4Success)
+			if f.Pass5BudgetExhausted {
+				sb.WriteString("- **Pass 5 budget was exhausted** (workspace may still fail checks; see GM-014)\n")
+			}
+			sb.WriteString("\n")
+		}
+	}
+
+	p5raw, err := os.ReadFile(filepath.Join(artDir, "pass-5.json"))
+	if err == nil {
+		var f prePRPass5ArtifactFile
+		if err := json.Unmarshal(p5raw, &f); err != nil {
+			fmt.Fprintf(&sb, "*pass-5.json is not valid JSON: %v*\n", err)
+		} else {
+			sb.WriteString("### Pass 5 — fix loop\n\n")
+			fmt.Fprintf(&sb, "- **Recorded fix rounds:** %d\n", len(f.Rounds))
+			sb.WriteString("\n")
+		}
+	}
+
+	return strings.TrimSpace(sb.String())
+}
+
+func collectPrePRArtifactRelPaths(artDir, runID string) []string {
+	baseRel := filepath.ToSlash(filepath.Join(AgentArtifactsDir, PrePrReviewArtifactsRoot, runID))
+	var names []string
+	for _, name := range []string{"handoff.json", "pass-3.json", "pass-4.json", "pass-5.json", "pass-1.json", "pass-2.json", "raw-matrix.json"} {
+		p := filepath.Join(artDir, name)
+		if _, err := os.Stat(p); err == nil {
+			names = append(names, filepath.ToSlash(filepath.Join(baseRel, name)))
+		}
+	}
+	ents, err := os.ReadDir(artDir)
+	if err == nil {
+		for _, e := range ents {
+			n := e.Name()
+			if strings.HasPrefix(n, "round-") && (strings.HasSuffix(n, "-pass-1.json") || strings.HasSuffix(n, "-pass-2.json")) {
+				names = append(names, filepath.ToSlash(filepath.Join(baseRel, n)))
+			}
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// LoadPRPromptPrePRReviewHandoff loads the current pre-pr-review run referenced by .jrdev/pre-pr-review/latest.
+// The caller should log warn when non-empty (GM-012). When Present is false, Summary and ArtifactPaths are empty.
+func LoadPRPromptPrePRReviewHandoff(workDir string) (h PRPromptPrePRReviewHandoff, warn string) {
+	workDir, err := filepath.Abs(workDir)
+	if err != nil {
+		return PRPromptPrePRReviewHandoff{}, fmt.Sprintf("pre-pr-review handoff: abs path: %v", err)
+	}
+	latestPath := filepath.Join(workDir, AgentArtifactsDir, PrePrReviewArtifactsRoot, "latest")
+	rawLatest, err := os.ReadFile(latestPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return PRPromptPrePRReviewHandoff{}, "pre-pr-review: no .jrdev/pre-pr-review/latest — PR prompt will use commit/diff context only"
+		}
+		return PRPromptPrePRReviewHandoff{}, fmt.Sprintf("pre-pr-review: read latest pointer: %v", err)
+	}
+	runID := strings.TrimSpace(string(rawLatest))
+	if runID == "" {
+		return PRPromptPrePRReviewHandoff{}, "pre-pr-review: .jrdev/pre-pr-review/latest is empty — PR prompt will use commit/diff context only"
+	}
+	artDir := filepath.Join(workDir, AgentArtifactsDir, PrePrReviewArtifactsRoot, runID)
+	st, err := os.Stat(artDir)
+	if err != nil || !st.IsDir() {
+		return PRPromptPrePRReviewHandoff{}, fmt.Sprintf("pre-pr-review: run directory for id %q is missing — PR prompt will use commit/diff context only", runID)
+	}
+
+	paths := collectPrePRArtifactRelPaths(artDir, runID)
+	var pathSB strings.Builder
+	for _, p := range paths {
+		fmt.Fprintf(&pathSB, "- `%s`\n", p)
+	}
+
+	var warnings []string
+	if _, err := os.Stat(filepath.Join(artDir, "handoff.json")); err != nil {
+		warnings = append(warnings, "handoff.json missing under latest pre-pr-review run (summaries may be incomplete)")
+	}
+	if _, err := os.Stat(filepath.Join(artDir, "pass-3.json")); err != nil {
+		warnings = append(warnings, "pass-3.json missing under latest pre-pr-review run")
+	}
+
+	return PRPromptPrePRReviewHandoff{
+		Present:       true,
+		Summary:       buildPRPromptHandoffSummaryMarkdown(artDir, runID),
+		ArtifactPaths: strings.TrimSpace(pathSB.String()),
+	}, strings.Join(warnings, "; ")
 }

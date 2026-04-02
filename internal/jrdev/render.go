@@ -52,6 +52,10 @@ type PRPromptData struct {
 	PRBase            string // compare branch for the PR (e.g. main)
 	CommitHistory     string
 	GitDiff           string
+	// PrePRReview* optional context from .jrdev/pre-pr-review/latest (GM-012).
+	PrePRReviewHandoffPresent bool
+	PrePRReviewHandoffSummary string
+	PrePRReviewArtifactPaths  string // markdown list; empty when Present is false
 }
 
 // PrePRReviewPass1PromptData is passed to prompt_pre_pr_review_pass1.md.

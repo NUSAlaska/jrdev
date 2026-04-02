@@ -28,12 +28,19 @@ func PullRequestTitleAndBody(cfg Config, agent AgentRunner, log func(string, ...
 		if err != nil {
 			return "", err
 		}
+		handoff, handoffWarn := LoadPRPromptPrePRReviewHandoff(intPath)
+		if handoffWarn != "" {
+			log("jrdev: warning: %s\n", handoffWarn)
+		}
 		return Render("pr", prompts.PR, PRPromptData{
-			IntegrationBranch: integrationBranch,
-			QueueLabel:        cfg.Label,
-			PRBase:            prBaseBranch,
-			CommitHistory:     hist,
-			GitDiff:           diff,
+			IntegrationBranch:         integrationBranch,
+			QueueLabel:                cfg.Label,
+			PRBase:                    prBaseBranch,
+			CommitHistory:             hist,
+			GitDiff:                   diff,
+			PrePRReviewHandoffPresent: handoff.Present,
+			PrePRReviewHandoffSummary: handoff.Summary,
+			PrePRReviewArtifactPaths:  handoff.ArtifactPaths,
 		})
 	}
 
