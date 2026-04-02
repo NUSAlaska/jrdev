@@ -25,6 +25,11 @@ func TestExtractSinglePRDMatrixFence(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "exactly one") {
 		t.Fatalf("got %v", err)
 	}
+
+	_, err = ExtractSinglePRDMatrixFence("```jrdev-prd-matrix\n{\"x\":1}\n")
+	if err == nil || !strings.Contains(err.Error(), "unclosed") {
+		t.Fatalf("expected unclosed fence error, got %v", err)
+	}
 }
 
 func TestValidatePRDMatrixJSON(t *testing.T) {
@@ -69,6 +74,18 @@ func TestValidatePRDMatrixJSON(t *testing.T) {
 	_, err = ValidatePRDMatrixJSON(missingSchema)
 	if err == nil {
 		t.Fatal("expected schemaVersion error")
+	}
+
+	noRequirementsKey := `{"schemaVersion":"1"}`
+	_, err = ValidatePRDMatrixJSON(noRequirementsKey)
+	if err == nil || !strings.Contains(err.Error(), "requirements") {
+		t.Fatalf("expected requirements error, got %v", err)
+	}
+
+	evidencePathsNull := `{"schemaVersion":"1","requirements":[{"id":"a","verbatimQuote":"q","status":"unknown","evidence":{"paths":null,"tests":[]},"notes":""}]}`
+	_, err = ValidatePRDMatrixJSON(evidencePathsNull)
+	if err == nil || !strings.Contains(err.Error(), "paths") {
+		t.Fatalf("expected paths error, got %v", err)
 	}
 }
 

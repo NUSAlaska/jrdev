@@ -108,7 +108,7 @@ func RunPrePrReview(cfg Config, prompts PromptBundle, agent AgentRunner, workDir
 	if err != nil {
 		return err
 	}
-	diff, err := GitDiffForPrompt(workDir)
+	diff, err := GitDiffForPromptFromBase(workDir, integrationBase)
 	if err != nil {
 		return err
 	}
@@ -129,10 +129,10 @@ func RunPrePrReview(cfg Config, prompts PromptBundle, agent AgentRunner, workDir
 		return err
 	}
 
-	pass1Print := !StdinIsInteractive() // GM-011: TTY uses interactive agent argv; headless uses -p
+	agentPrint := !StdinIsInteractive() // GM-011: TTY uses interactive agent argv; headless uses -p
 	pass1Out, err := runAgentUntilComplete(cfg, agent, log, "pre-pr-review pass1", workDir, func() (string, error) {
 		return pass1Body, nil
-	}, pass1Print)
+	}, agentPrint)
 	if err != nil {
 		return err
 	}
@@ -146,7 +146,7 @@ func RunPrePrReview(cfg Config, prompts PromptBundle, agent AgentRunner, workDir
 		repairPrompt := PrePRMatrixRepairPrompt(inner, err.Error())
 		repairOut, rerr := runAgentUntilComplete(cfg, agent, log, "pre-pr-review matrix repair", workDir, func() (string, error) {
 			return repairPrompt, nil
-		}, true)
+		}, agentPrint)
 		if rerr != nil {
 			return fmt.Errorf("pre-pr-review matrix repair: %w", rerr)
 		}

@@ -7,5 +7,5 @@ type PromptBundle struct {
 	Review            string
 	Merge             string
 	PR                string // optional; empty skips agent-generated PR title/body
-	PrePRReviewPass1   string
+	PrePRReviewPass1 string
 }

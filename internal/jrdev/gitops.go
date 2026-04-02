@@ -284,14 +284,24 @@ func CommitHistoryForPrompt(workDir string) (string, error) {
 	return string(out), nil
 }
 
-// GitDiffForPrompt returns git diff main..HEAD text for prompt templates.
-func GitDiffForPrompt(workDir string) (string, error) {
-	c := exec.Command("git", "-C", workDir, "diff", "main..HEAD")
+// GitDiffForPromptFromBase returns git diff base..HEAD for prompt templates.
+// Empty base defaults to origin/main (same default as git-log issue discovery).
+func GitDiffForPromptFromBase(workDir, base string) (string, error) {
+	if strings.TrimSpace(base) == "" {
+		base = "origin/main"
+	}
+	rng := fmt.Sprintf("%s..HEAD", base)
+	c := exec.Command("git", "-C", workDir, "diff", rng)
 	out, err := c.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("git diff main..HEAD (prompt): %w\n%s", err, out)
+		return "", fmt.Errorf("git diff %s (prompt): %w\n%s", rng, err, out)
 	}
 	return string(out), nil
+}
+
+// GitDiffForPrompt returns git diff main..HEAD text for prompt templates.
+func GitDiffForPrompt(workDir string) (string, error) {
+	return GitDiffForPromptFromBase(workDir, "main")
 }
 
 // MergeBranchInDir runs git merge branch --no-edit in workDir.

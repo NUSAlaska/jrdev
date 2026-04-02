@@ -30,7 +30,7 @@ Last commits in this worktree:
 {{.CommitHistory}}
 ```
 
-Diff (**main**..HEAD):
+Diff ({{.IntegrationBase}}..HEAD):
 
 ```
 {{.GitDiff}}

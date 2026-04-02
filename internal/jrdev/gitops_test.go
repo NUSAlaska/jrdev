@@ -80,6 +80,50 @@ func TestGitDiffForPrompt(t *testing.T) {
 	if !strings.Contains(s, "diff --git") || !strings.Contains(s, "-a") || !strings.Contains(s, "+b") {
 		t.Fatalf("expected unified diff with change a->b: %q", s)
 	}
+
+	s2, err := GitDiffForPromptFromBase(tmp, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s2 != s {
+		t.Fatalf("GitDiffForPromptFromBase(main) mismatch\n%s\nvs\n%s", s2, s)
+	}
+}
+
+func TestGitDiffForPromptFromBase_customIntegrationBase(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	tmp := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", args...)
+		c.Dir = tmp
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	runGit("init", "-b", "develop")
+	_ = exec.Command("git", "-C", tmp, "config", "user.email", "t@t").Run()
+	_ = exec.Command("git", "-C", tmp, "config", "user.name", "t").Run()
+	if err := os.WriteFile(filepath.Join(tmp, "f"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit("add", "f")
+	runGit("commit", "-m", "on develop")
+	runGit("checkout", "-b", "feature")
+	if err := os.WriteFile(filepath.Join(tmp, "f"), []byte("b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit("commit", "-am", "on feature")
+
+	s, err := GitDiffForPromptFromBase(tmp, "develop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(s, "diff --git") || !strings.Contains(s, "-a") || !strings.Contains(s, "+b") {
+		t.Fatalf("expected unified diff from develop..HEAD: %q", s)
+	}
 }
 
 func TestBranchMergedIntoHead(t *testing.T) {

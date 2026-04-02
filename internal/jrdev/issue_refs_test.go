@@ -17,6 +17,7 @@ func TestParseIssueRefsFromGitLogMessage(t *testing.T) {
 		{"prefix Closes  #7 suffix", []int{7}},
 		{"multiline\n\nresolves #1\nFixes #2", []int{1, 2}},
 		{"Fixes: #5", []int{5}},
+		{"Fixes#6", []int{6}},
 		{"no match here", nil},
 		{"Fixes gh-12", nil},
 	}
