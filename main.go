@@ -50,6 +50,7 @@ func run() int {
 	flag.BoolVar(&verbose, "verbose", false, "verbose logging (same as -v)")
 	integrationBase := flag.String("integration-base", "origin/main", "rev to branch integration run from")
 	fresh := flag.Bool("fresh", false, "discard prior jrdev worktrees/branches (--worktrees + agent-queue/*); skip resume prompt")
+	cleanupOnly := flag.Bool("cleanup", false, "remove jrdev worktrees and agent-queue/* branches from a prior run, then exit (no config, no pipeline)")
 	configPath := flag.String("config", "", "repository jrdev YAML (default: <repo>/.jrdev/config.yaml)")
 	integrationBlocked := flag.String("integration-blocked", "", "when merge agent prints JRDEV_INTEGRATION_BLOCKED — force abort or merge (waive); overrides meta; empty uses meta.integration_blocked_action or prompt/default")
 	agentBin := flag.String("agent", "", "Cursor agent binary (default: agent on PATH)")
@@ -98,6 +99,24 @@ func run() int {
 			fmt.Fprintf(os.Stderr, "jrdev: %v\n", err)
 			return 1
 		}
+	}
+
+	if *cleanupOnly {
+		workRootAbs, err := filepath.Abs(filepath.Join(repoRoot, *worktrees))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "jrdev: worktrees path: %v\n", err)
+			return 1
+		}
+		git := jrdev.GitOps{RepoRoot: repoRoot}
+		if verbose {
+			git.Log = func(format string, args ...any) { fmt.Printf(format, args...) }
+		}
+		if err := git.CleanupJrdevWorkstate(workRootAbs); err != nil {
+			fmt.Fprintf(os.Stderr, "jrdev: cleanup: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(os.Stdout, "jrdev: cleaned worktrees under %s and local agent-queue/* branches.\n", workRootAbs)
+		return 0
 	}
 
 	cursorDir := *agentCursorDir
@@ -303,6 +322,7 @@ func usage(name string, w io.Writer) {
 		{"--config path", "Repository jrdev YAML; default <repo>/.jrdev/config.yaml"},
 		{"--integration-blocked abort|merge", "When merge agent emits JRDEV_INTEGRATION_BLOCKED — force stop or waive (overrides meta); default non-interactive is abort unless meta sets integration_blocked_action"},
 		{"--fresh", "Remove jrdev worktrees and agent-queue/* branches; do not resume a prior integration run"},
+		{"--cleanup", "Only remove jrdev worktrees (under --worktrees) and local agent-queue/* branches, then exit"},
 		{"--agent path", "Cursor agent binary; default is agent on PATH"},
 		{"--agent-model name", "Cursor agent --model; default " + jrdev.DefaultAgentModel},
 		{"--agent-permissions file", "Cursor permission JSON (jrdev format); if unset, uses <repo>/.cursor/" + jrdev.ProjectCursorCLIConfigName + " when present, else " + jrdev.DefaultAgentPermissionsName + " beside the binary"},
