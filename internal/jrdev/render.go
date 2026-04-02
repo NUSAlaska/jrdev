@@ -101,6 +101,20 @@ type PrePRReviewPass3PromptData struct {
 	FinalRound                 int
 }
 
+// PrePRReviewPass5PromptData is passed to prompt_pre_pr_review_pass5.md (GM-010 — logs only from jrdev).
+type PrePRReviewPass5PromptData struct {
+	IntegrationBranch   string
+	IntegrationBase     string
+	IssueNumbers        []int
+	FailingKind         string // lint | unit | integration
+	FailingCommand      string
+	CapturedLogs        string
+	NonInteractive      bool
+	BonusSteeringNote   string
+	Pass5Round          int
+	Fingerprint         string
+}
+
 // Render treats body as a Go text/template with the given name for errors.
 func Render(name, body string, data any) (string, error) {
 	tmpl, err := template.New(name).Parse(body)

@@ -18,6 +18,7 @@ const (
 	prePRReviewMaxCycles  = 3
 	pass2HandoffFenceTag  = "jrdev-pre-pr-review-handoff"
 	pass3ArtifactFenceTag = "jrdev-pre-pr-review-pass3"
+	pass5HandoffFenceTag  = "jrdev-pre-pr-review-pass5-handoff"
 )
 
 // PrePRPass2Handoff is the JSON inside the pass-2 handoff fence (GM-012 / session handoff).
@@ -39,6 +40,42 @@ type PrePRSessionHandoff struct {
 	ConflictNotes string `json:"conflictNotes"`
 	FinalRound    int    `json:"finalRound"`
 	MatrixHadGaps bool   `json:"matrixHadGapsAtEnd"`
+	// Pass5BadTestByDesign and Pass5OperatorNotes may be merged after Pass 5 (optional fence in agent output).
+	Pass5BadTestByDesign string `json:"pass5BadTestByDesign,omitempty"`
+	Pass5OperatorNotes   string `json:"pass5OperatorNotes,omitempty"`
+}
+
+// PrePRPass5Handoff is optional JSON inside the pass-5 handoff fence (GM-010).
+type PrePRPass5Handoff struct {
+	BadTestByDesign string `json:"badTestByDesign"`
+	OperatorNotes   string `json:"operatorNotes"`
+}
+
+type prePRPass4ArtifactAttempt struct {
+	Attempt     int               `json:"attempt"`
+	Success     bool              `json:"success"`
+	Fingerprint string            `json:"fingerprint,omitempty"`
+	Steps       []Pass4StepRecord `json:"steps"`
+	FailedStep  *Pass4StepRecord  `json:"failedStep,omitempty"`
+}
+
+type prePRPass4ArtifactFile struct {
+	Attempts             []prePRPass4ArtifactAttempt `json:"attempts"`
+	FinalPass4Success    bool                        `json:"finalPass4Success"`
+	Pass5BudgetExhausted bool                        `json:"pass5BudgetExhausted,omitempty"`
+}
+
+type prePRPass5RoundRecord struct {
+	Round             int    `json:"round"`
+	Fingerprint       string `json:"fingerprint"`
+	FailingKind       string `json:"failingKind"`
+	FailingCommand    string `json:"failingCommand"`
+	HandoffFenceInner string `json:"pass5HandoffFenceInner,omitempty"`
+	HandoffParseError string `json:"pass5HandoffParseError,omitempty"`
+}
+
+type prePRPass5ArtifactFile struct {
+	Rounds []prePRPass5RoundRecord `json:"rounds"`
 }
 
 // PrePRPass3Artifact is the JSON inside the pass-3 artifact fence (GM-008).
@@ -194,6 +231,205 @@ func readBonusSteeringNote() (string, error) {
 	return PrePRReviewBonusCycleSteeringNonInteractive, nil
 }
 
+func readPass5BonusSteeringNote() (string, error) {
+	if StdinIsInteractive() {
+		fmt.Fprintf(os.Stderr, "jrdev: pre-pr-review: checks still failing after 3 Pass 5 rounds on the same fingerprint — enter a short steering note for one bonus Pass 5 round: ")
+		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(line), nil
+	}
+	return PrePRReviewPass5BonusCycleSteeringNonInteractive, nil
+}
+
+func parsePass5HandoffOptional(agentOut string) (h PrePRPass5Handoff, rawInner string, parseErr string) {
+	if !strings.Contains(agentOut, pass5HandoffFenceTag) {
+		return PrePRPass5Handoff{}, "", ""
+	}
+	inner, err := ExtractSingleMarkdownFence(pass5HandoffFenceTag, agentOut)
+	if err != nil {
+		return PrePRPass5Handoff{}, "", err.Error()
+	}
+	rawInner = inner
+	var hh PrePRPass5Handoff
+	if err := json.Unmarshal([]byte(inner), &hh); err != nil {
+		return PrePRPass5Handoff{}, rawInner, err.Error()
+	}
+	return hh, rawInner, ""
+}
+
+func mergePass5HandoffIntoSessionFile(path string, h PrePRPass5Handoff) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var sess PrePRSessionHandoff
+	if err := json.Unmarshal(raw, &sess); err != nil {
+		return fmt.Errorf("handoff.json: %w", err)
+	}
+	if t := strings.TrimSpace(h.BadTestByDesign); t != "" {
+		sess.Pass5BadTestByDesign = t
+	}
+	if t := strings.TrimSpace(h.OperatorNotes); t != "" {
+		sess.Pass5OperatorNotes = t
+	}
+	out, err := json.MarshalIndent(sess, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, out, 0o644)
+}
+
+func writePrePRPass4Artifact(artDir string, attempts []prePRPass4ArtifactAttempt, finalSuccess, budgetExhausted bool) error {
+	wrap := prePRPass4ArtifactFile{
+		Attempts:             attempts,
+		FinalPass4Success:    finalSuccess,
+		Pass5BudgetExhausted: budgetExhausted,
+	}
+	b, err := json.MarshalIndent(wrap, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(artDir, "pass-4.json"), b, 0o644)
+}
+
+func writePrePRPass5Artifact(artDir string, rounds []prePRPass5RoundRecord) error {
+	if rounds == nil {
+		rounds = []prePRPass5RoundRecord{}
+	}
+	wrap := prePRPass5ArtifactFile{Rounds: rounds}
+	b, err := json.MarshalIndent(wrap, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(artDir, "pass-5.json"), b, 0o644)
+}
+
+func runPrePRPass4And5(cfg Config, prompts PromptBundle, agent AgentRunner, workDir, artDir, branch, integrationBase string, issueNums []int, agentPrint bool, log func(string, ...any)) error {
+	if strings.TrimSpace(prompts.PrePRReviewPass5) == "" {
+		return fmt.Errorf("jrdev: embedded pre-pr-review pass 5 prompt is empty")
+	}
+	handoffPath := filepath.Join(artDir, "handoff.json")
+	plan := BuildPass4CheckPlan(cfg.Project)
+
+	var pass4Attempts []prePRPass4ArtifactAttempt
+	var pass5Rounds []prePRPass5RoundRecord
+
+	activeFP := ""
+	pass5RoundForFP := 0
+	bonusNote := ""
+
+	for attempt := 1; ; attempt++ {
+		outcome := RunPass4Checks(workDir, plan)
+		fp := ""
+		if !outcome.Success && outcome.FailedStep != nil {
+			fp = Pass4FailureFingerprint(outcome.FailedStep.Kind, outcome.FailedStep.Output)
+		}
+
+		arec := prePRPass4ArtifactAttempt{Attempt: attempt, Success: outcome.Success, Steps: outcome.Steps}
+		if outcome.FailedStep != nil {
+			fs := *outcome.FailedStep
+			arec.FailedStep = &fs
+			arec.Fingerprint = fp
+		}
+		pass4Attempts = append(pass4Attempts, arec)
+
+		if outcome.Success {
+			if err := writePrePRPass4Artifact(artDir, pass4Attempts, true, false); err != nil {
+				return err
+			}
+			if err := writePrePRPass5Artifact(artDir, pass5Rounds); err != nil {
+				return err
+			}
+			log("jrdev: pre-pr-review: Pass 4 checks passed\n")
+			return nil
+		}
+
+		if outcome.FailedStep == nil {
+			return fmt.Errorf("jrdev: pre-pr-review Pass 4: failure with no failed step recorded")
+		}
+
+		if fp != activeFP {
+			activeFP = fp
+			pass5RoundForFP = 0
+			bonusNote = ""
+		}
+		pass5RoundForFP++
+		if pass5RoundForFP > prePRPass5MaxRounds {
+			log("jrdev: pre-pr-review: Pass 5 budget exhausted for this failure fingerprint (GM-010); leaving checks red (GM-014)\n")
+			if err := writePrePRPass4Artifact(artDir, pass4Attempts, false, true); err != nil {
+				return err
+			}
+			if err := writePrePRPass5Artifact(artDir, pass5Rounds); err != nil {
+				return err
+			}
+			return nil
+		}
+		if pass5RoundForFP == prePRPass5MaxRounds {
+			n, err := readPass5BonusSteeringNote()
+			if err != nil {
+				return err
+			}
+			bonusNote = n
+		} else {
+			bonusNote = ""
+		}
+
+		pass5Body, err := Render("pre-pr-review pass5", prompts.PrePRReviewPass5, PrePRReviewPass5PromptData{
+			IntegrationBranch:   branch,
+			IntegrationBase:     integrationBase,
+			IssueNumbers:        issueNums,
+			FailingKind:         string(outcome.FailedStep.Kind),
+			FailingCommand:      outcome.FailedStep.Command,
+			CapturedLogs:        outcome.FailedStep.Output,
+			NonInteractive:      !StdinIsInteractive(),
+			BonusSteeringNote:   bonusNote,
+			Pass5Round:          pass5RoundForFP,
+			Fingerprint:         fp,
+		})
+		if err != nil {
+			return err
+		}
+		pass5Out, err := runAgentUntilComplete(cfg, agent, log, "pre-pr-review pass5", workDir, func() (string, error) {
+			return pass5Body, nil
+		}, agentPrint)
+		if err != nil {
+			return err
+		}
+		h, rawH, hErr := parsePass5HandoffOptional(pass5Out)
+		p5rec := prePRPass5RoundRecord{
+			Round:             pass5RoundForFP,
+			Fingerprint:       fp,
+			FailingKind:       string(outcome.FailedStep.Kind),
+			FailingCommand:    outcome.FailedStep.Command,
+			HandoffParseError: hErr,
+		}
+		if hErr != "" && rawH != "" {
+			p5rec.HandoffFenceInner = rawH
+		}
+		pass5Rounds = append(pass5Rounds, p5rec)
+
+		if hErr == "" && (strings.TrimSpace(h.BadTestByDesign) != "" || strings.TrimSpace(h.OperatorNotes) != "") {
+			if err := mergePass5HandoffIntoSessionFile(handoffPath, h); err != nil {
+				return err
+			}
+		}
+
+		if err := writePrePRPass4Artifact(artDir, pass4Attempts, false, false); err != nil {
+			return err
+		}
+		if err := writePrePRPass5Artifact(artDir, pass5Rounds); err != nil {
+			return err
+		}
+
+		if err := RequireGitWorkingTreeClean(workDir); err != nil {
+			return err
+		}
+		log("jrdev: pre-pr-review: Pass 5 round %d complete; re-running Pass 4\n", pass5RoundForFP)
+	}
+}
+
 func writePass2RoundArtifact(artDir string, round int, handoff PrePRPass2Handoff, rawFenceInner string, parseErr string) error {
 	type wrap struct {
 		Round        int               `json:"round"`
@@ -223,7 +459,7 @@ func mergeSessionHandoff(last PrePRPass2Handoff, finalRound int, matrixHadGaps b
 	}
 }
 
-// RunPrePrReview executes discovery, Pass 1 ↔ Pass 2 loops, Pass 3 test-design review, artifacts, and session handoff (GM-007, GM-008, GM-012, GM-014).
+// RunPrePrReview executes discovery, Pass 1 ↔ Pass 2 loops, Pass 3 test-design review, Pass 4 configured checks, and Pass 5 fix loop, with artifacts and session handoff (GM-007–GM-010, GM-012, GM-014).
 func RunPrePrReview(cfg Config, prompts PromptBundle, agent AgentRunner, workDir string, log func(string, ...any)) error {
 	if log == nil {
 		log = func(string, ...any) {}
@@ -504,6 +740,9 @@ finalize:
 	}
 	log("jrdev: pre-pr-review: Pass 3 artifact written (pass-3.json)\n")
 	if err := RequireGitWorkingTreeClean(workDir); err != nil {
+		return err
+	}
+	if err := runPrePRPass4And5(cfg, prompts, agent, workDir, artDir, branch, integrationBase, issueNums, agentPrint, log); err != nil {
 		return err
 	}
 	return nil

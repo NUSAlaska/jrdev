@@ -10,4 +10,5 @@ type PromptBundle struct {
 	PrePRReviewPass1  string
 	PrePRReviewPass2  string
 	PrePRReviewPass3  string
+	PrePRReviewPass5  string
 }

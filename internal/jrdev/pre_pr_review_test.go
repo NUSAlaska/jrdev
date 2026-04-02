@@ -206,6 +206,51 @@ func TestWritePass3Artifact_parseErrorPreservesRaw(t *testing.T) {
 	}
 }
 
+func TestParsePass5HandoffOptional_absent(t *testing.T) {
+	h, raw, perr := parsePass5HandoffOptional("COMPLETE\nno fence")
+	if perr != "" || raw != "" || h != (PrePRPass5Handoff{}) {
+		t.Fatalf("h=%+v raw=%q perr=%q", h, raw, perr)
+	}
+}
+
+func TestParsePass5HandoffOptional_valid(t *testing.T) {
+	body := "```" + pass5HandoffFenceTag + "\n" + `{"badTestByDesign":"x","operatorNotes":"y"}` + "\n```\n"
+	h, raw, perr := parsePass5HandoffOptional(body)
+	if perr != "" {
+		t.Fatal(perr)
+	}
+	if h.BadTestByDesign != "x" || h.OperatorNotes != "y" || raw == "" {
+		t.Fatalf("%+v raw=%q", h, raw)
+	}
+}
+
+func TestMergePass5HandoffIntoSessionFile(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "handoff.json")
+	sess := PrePRSessionHandoff{DraftPRTitle: "t", FinalRound: 2, MatrixHadGaps: false}
+	b, err := json.MarshalIndent(sess, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := mergePass5HandoffIntoSessionFile(path, PrePRPass5Handoff{BadTestByDesign: "bad", OperatorNotes: "note"}); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got PrePRSessionHandoff
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.DraftPRTitle != "t" || got.Pass5BadTestByDesign != "bad" || got.Pass5OperatorNotes != "note" {
+		t.Fatalf("%+v", got)
+	}
+}
+
 func TestMergeSessionHandoff_trimsAndFlags(t *testing.T) {
 	last := PrePRPass2Handoff{
 		DraftPRTitle:  "  t  ",
