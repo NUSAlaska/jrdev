@@ -38,7 +38,7 @@ func PullRequestTitleAndBody(cfg Config, agent AgentRunner, log func(string, ...
 	}
 
 	vlog(cfg, log, "jrdev: verbose: pr description — agent run in %s\n", intPath)
-	out, err := runAgentUntilComplete(cfg, agent, log, "pr", intPath, render)
+	out, err := runAgentUntilComplete(cfg, agent, log, "pr", intPath, render, true)
 	if err != nil {
 		log("jrdev: warning: PR description agent failed (%v); using default title/body\n", err)
 		return fallbackTitle, fallbackBody

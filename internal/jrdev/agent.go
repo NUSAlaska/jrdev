@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -101,8 +102,16 @@ func (r OSAgentRunner) Run(cfg Config, dir string, prompt string, opts AgentRunO
 		}
 	}
 	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
+	if opts.Print {
+		cmd.Stdout = &buf
+		cmd.Stderr = &buf
+	} else {
+		// TTY mode: attach stdin; tee stdout/stderr to terminal and buffer (for COMPLETE detection).
+		cmd.Stdin = os.Stdin
+		tee := io.MultiWriter(os.Stdout, &buf)
+		cmd.Stdout = tee
+		cmd.Stderr = tee
+	}
 	runErr := cmd.Run()
 	_ = writeTextFile(filepath.Join(runDir, agentArtifactOutputFilename), buf.String())
 	if runErr != nil {

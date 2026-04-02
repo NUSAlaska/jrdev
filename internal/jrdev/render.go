@@ -54,6 +54,19 @@ type PRPromptData struct {
 	GitDiff           string
 }
 
+// PrePRReviewPass1PromptData is passed to prompt_pre_pr_review_pass1.md.
+type PrePRReviewPass1PromptData struct {
+	IntegrationBranch string
+	IntegrationBase   string
+	IssueNumbers      []int
+	IssuesMarkdown    string // gh-fetched bodies + headings
+	CommitHistory     string
+	GitDiff           string
+	LintTests         string
+	UnitTests         string
+	NonInteractive    bool
+}
+
 // Render treats body as a Go text/template with the given name for errors.
 func Render(name, body string, data any) (string, error) {
 	tmpl, err := template.New(name).Parse(body)

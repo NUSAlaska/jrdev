@@ -216,7 +216,7 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 			}
 			return Render("implement", prompts.Implement, implData)
 		}
-		implOut, err := runAgentUntilComplete(cfg, agent, log, "implement", issuePath, renderImplement)
+		implOut, err := runAgentUntilComplete(cfg, agent, log, "implement", issuePath, renderImplement, true)
 		if err != nil {
 			return err
 		}
@@ -232,7 +232,7 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 		}
 		if commits == 0 && !noCommitOK {
 			log("jrdev: zero commits after implement — retrying implement phase.\n")
-			implOut, err = runAgentUntilComplete(cfg, agent, log, "implement", issuePath, renderImplement)
+			implOut, err = runAgentUntilComplete(cfg, agent, log, "implement", issuePath, renderImplement, true)
 			if err != nil {
 				return err
 			}
@@ -264,7 +264,7 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 				}
 				return Render("review", prompts.Review, implData)
 			}
-			if _, err := runAgentUntilComplete(cfg, agent, log, "review", issuePath, renderReview); err != nil {
+			if _, err := runAgentUntilComplete(cfg, agent, log, "review", issuePath, renderReview, true); err != nil {
 				return err
 			}
 		}
@@ -291,7 +291,7 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 			}
 			return Render("merge", prompts.Merge, mergeData)
 		}
-		mergeOut, err := runAgentUntilComplete(cfg, agent, log, "merge", intPath, renderMerge)
+		mergeOut, err := runAgentUntilComplete(cfg, agent, log, "merge", intPath, renderMerge, true)
 		if err != nil {
 			return fmt.Errorf("merge phase: %w", err)
 		}
@@ -377,7 +377,8 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 
 // runAgentUntilComplete invokes agent.Run with a fresh prompt from render on each attempt until stdout
 // contains AgentPhaseCompleteToken or maxAgentStepAttempts is reached.
-func runAgentUntilComplete(cfg Config, agent AgentRunner, log func(string, ...any), phase, workDir string, render func() (string, error)) (string, error) {
+// agentPrint is passed to AgentRunOptions.Print (TTY workflows use false for Pass 1 per GM-011).
+func runAgentUntilComplete(cfg Config, agent AgentRunner, log func(string, ...any), phase, workDir string, render func() (string, error), agentPrint bool) (string, error) {
 	var lastOut string
 	for attempt := 1; attempt <= maxAgentStepAttempts; attempt++ {
 		body, err := render()
@@ -385,7 +386,7 @@ func runAgentUntilComplete(cfg Config, agent AgentRunner, log func(string, ...an
 			return "", err
 		}
 		vlog(cfg, log, "jrdev: verbose: %s — attempt %d/%d, prompt %d bytes\n", phase, attempt, maxAgentStepAttempts, len(body))
-		out, err := agent.Run(cfg, workDir, body, AgentRunOptions{Print: true})
+		out, err := agent.Run(cfg, workDir, body, AgentRunOptions{Print: agentPrint})
 		lastOut = out
 		if err != nil {
 			return out, fmt.Errorf("%s: %w", phase, err)

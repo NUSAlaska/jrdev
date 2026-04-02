@@ -14,7 +14,7 @@ import (
 	"github.com/NUSAlaska/jrdev/internal/jrdev"
 )
 
-//go:embed prompt_plan.md prompt_implement.md prompt_review.md prompt_merge.md prompt_pr.md
+//go:embed prompt_plan.md prompt_implement.md prompt_review.md prompt_merge.md prompt_pr.md prompt_pre_pr_review_pass1.md
 var promptFS embed.FS
 
 func main() {
@@ -27,9 +27,18 @@ func run() int {
 	name := programName()
 	args := os.Args[1:]
 	sub := "run"
-	if len(args) > 0 && args[0] == "init" {
-		sub = "init"
-		args = args[1:]
+	if len(args) > 0 {
+		switch args[0] {
+		case "init":
+			sub = "init"
+			args = args[1:]
+		case "pre-pr-review":
+			sub = "pre-pr-review"
+			args = args[1:]
+		case "help", "-help", "--help":
+			usage(name, os.Stdout)
+			return 0
+		}
 	}
 	if len(args) > 0 && (args[0] == "help" || args[0] == "-help" || args[0] == "--help") {
 		usage(name, os.Stdout)
@@ -250,6 +259,14 @@ func run() int {
 		a = jrdev.OSAgentRunner{Log: log}
 	}
 
+	if sub == "pre-pr-review" {
+		if err := jrdev.RunPrePrReview(cfg, prompts, a, startDir, log); err != nil {
+			fmt.Fprintf(os.Stderr, "jrdev: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+
 	if err := jrdev.Run(cfg, prompts, a, log); err != nil {
 		fmt.Fprintf(os.Stderr, "jrdev: %v\n", err)
 		return 1
@@ -285,7 +302,11 @@ func loadPrompts() (jrdev.PromptBundle, error) {
 	if err != nil {
 		return jrdev.PromptBundle{}, err
 	}
-	return jrdev.PromptBundle{Plan: plan, Implement: impl, Review: rev, Merge: mer, PR: pr}, nil
+	p1, err := read("prompt_pre_pr_review_pass1.md")
+	if err != nil {
+		return jrdev.PromptBundle{}, err
+	}
+	return jrdev.PromptBundle{Plan: plan, Implement: impl, Review: rev, Merge: mer, PR: pr, PrePRReviewPass1: p1}, nil
 }
 
 func programName() string {
@@ -298,6 +319,7 @@ func usage(name string, w io.Writer) {
 	fmt.Fprintf(&b, "Syntax:\n")
 	fmt.Fprintf(&b, "  %s [flags]\n", name)
 	fmt.Fprintf(&b, "  %s init [flags]   interactive setup wizard for .jrdev/config.yaml\n", name)
+	fmt.Fprintf(&b, "  %s pre-pr-review [flags]   issue discovery + Pass 1 PRD matrix on integration branch checkout\n", name)
 	fmt.Fprintf(&b, "  %s help\n", name)
 	fmt.Fprintf(&b, "  %s -h | -help | --help\n\n", name)
 	fmt.Fprintf(&b, "Typical calls:\n")
