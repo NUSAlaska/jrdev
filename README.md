@@ -2,248 +2,304 @@
 
 `jrdev` drives a **plan → implement → review → merge** loop for GitHub issues labeled **`agent-queue`** (configurable), using the **Cursor CLI `agent`** for intelligence and Go for **git** / **`gh`** orchestration.
 
-## What you need installed
+## Recommended workflow: three bundled skills (in order)
+
+Before you run `jrdev`, this repository includes **three Cursor agent skills** under [`Skills/`](Skills/). Use them **one after the other** so work is scoped, written down, and split into slices that `jrdev` can execute reliably.
+
+1. **[`grill-me`](Skills/grill-me/SKILL.md)** — Use the chat **depth-first**: settle the big decisions for a new feature or refactor (one question per turn until each branch is clear). This is where most of the product and engineering detail should be decided verbally.
+
+2. **[`write-a-prd`](Skills/write-a-prd/SKILL.md)** — Takes that settled discussion (or another decision artifact) and turns it into a **PRD**, then **opens it as a GitHub issue**. The PRD is optimized for the next step—stable **`GM-xx`** decision IDs and structure—not a raw transcript.
+
+3. **[`prd-to-issues`](Skills/prd-to-issues/SKILL.md)** — Reads that PRD issue and **breaks it into vertical slices** (tracer bullets): independently grabbable GitHub issues that match how `jrdev` processes the queue, instead of vague horizontal layers.
+
+After those issues exist (and carry the **`agent-queue`** label, or whatever you set with **`--label`**), run **`jrdev`** from the target application repository.
+
+## Basic use case
+
+**Target repository:** run `jrdev` with your **current working directory inside the project you want to automate** (any subfolder is fine), or pass **`--repo`** with the absolute path to that project’s root. The tool finds the git root by walking up for **`.git`**.
+
+Each cycle: the agent **plans** in an integration worktree, picks **one** queued issue, **implements** and **reviews** in an issue worktree, then **merges** back with **integration** checks from your config. Successful issues are closed and unlabeled; when the plan is empty or limits hit, `jrdev` can open a PR to **`main`**.
+
+**Network / auth:** `gh` uses your GitHub session (`gh auth login`). For **`git fetch`** / **`git push`**, SSH or HTTPS must work. If **`git fetch`** / **`git push`** fails with SSH key errors, `jrdev` may try interactive **`ssh-add`** once (needs a real TTY); otherwise fix credentials before running.
+
+---
+
+## Configure the Cursor agent (`cli-config.json`)
+
+The Cursor **`agent`** CLI reads **[`cli-config.json`](https://cursor.com/docs/cli/reference/configuration)** (global, project, or via **`CURSOR_CONFIG_DIR`**). In headless mode (**`-p`**), **shell** tools such as **`git`**, **`go`**, or **`gh`** only run if your config **allows** them.
+
+**Project layout:** at the git root, put **`cli-config.json`** in **`.cursor/`**. If neither **`--agent-permissions`** nor **`--agent-cursor-config-dir`** is set and **`<repo>/.cursor/cli-config.json`** exists, `jrdev` sets **`CURSOR_CONFIG_DIR`** to **`<repo>/.cursor`**.
+
+**Example** **`<repo>/.cursor/cli-config.json`** (trim and extend `permissions.allow` to match what your agents need; see Cursor’s [permissions reference](https://cursor.com/docs/cli/reference/permissions)):
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Shell(git)",
+      "Shell(gh)",
+      "Shell(go)",
+      "Read(**)",
+      "Write(**)"
+    ],
+    "deny": []
+  },
+  "version": 1
+}
+```
+
+**Overrides:**
+
+- **`--agent-cursor-config-dir`** — directory that contains **`cli-config.json`** (passed as **`CURSOR_CONFIG_DIR`**). Mutually exclusive with **`--agent-permissions`**.
+- **`--agent-permissions`** — path to a small JSON file like **`{"allow":["git","go","gh"],"deny":[]}`**; `jrdev` writes a temporary **`cli-config.json`** (and includes **`Read(**)`** / **`Write(**)`**).
+
+If neither flag is set: **`<repo>/.cursor/cli-config.json`** (if present), else **`jrdev-agent-permissions.json`** next to the **`jrdev`** binary (if present). If neither exists, `jrdev` does not set **`CURSOR_CONFIG_DIR`**.
+
+With **`-v` / `--verbose`**, startup logs show which discovery path is in effect.
+
+Some Cursor installs document project config as **`.cursor/cli.json`**. `jrdev` discovery expects **`.cursor/cli-config.json`** so the folder can serve as **`CURSOR_CONFIG_DIR`**.
+
+---
+
+## Configure the repository (`.jrdev/config.yaml`)
+
+Default path: **`<repo>/.jrdev/config.yaml`**. Override with **`--config`**.
+
+- **`config_ready`**: must be **`true`** before the pipeline runs. **`jrdev init`** (TTY) creates or finishes the file; non-interactive runs with **`config_ready: false`** exit with an error pointing you to **`jrdev init`**.
+- **`lint`**, **`unit`**, **`integration`**: optional YAML lists of shell commands. They are embedded in agent prompts (**implement** / **review** use **lint** + **unit**; **merge** uses **integration**). **jrdev does not run a separate post-merge gate**—the lists you configure are what agents are asked to run.
+- If all three lists are empty but **`config_ready`** is **`true`**, prompts include an explicit **no checks configured** note.
+- **`meta`**: optional map (e.g. **`source_preset`** after **`jrdev init`**, **`integration_blocked_action`** for **`JRDEV_INTEGRATION_BLOCKED:`**). v1 does not load repo config from environment variables.
+
+**Example:**
+
+```yaml
+config_ready: true
+
+lint:
+  - go vet ./...
+
+unit:
+  - go test ./...
+
+integration:
+  - go test -count=1 ./...
+```
+
+Background and roadmap: [jrdev PRD — issue #1](https://github.com/NUSAlaska/jrdev/issues/1).
+
+---
+
+## Log in: Git, GitHub CLI, and Cursor agent
+
+| Piece | What to verify |
+|--------|----------------|
+| **Git** | On **`PATH`**; **`git version`** works. Credentials for **`origin`** (HTTPS or SSH) must allow **fetch** / **push** for the repo you automate. |
+| **`gh`** | Installed; **`gh auth login`**, then **`gh auth status`** shows the right account and can access the repo. |
+| **Cursor `agent`** | CLI on **`PATH`** (or pass **`--agent`** with the full path). **`agent --help`** (or your build’s help flag) works. Sign in through Cursor as you normally would so headless runs can use your account. |
+
+**Linux — quick checklist**
+
+1. **Go** 1.26+ (see **`go.mod`**).
+2. **Git** — e.g. `sudo apt install git` where needed.
+3. **`gh auth login`** and **`gh auth status`**.
+4. **`command -v agent`** and **`agent --help`**. If the binary is not on **`PATH`**, use **`jrdev --agent /full/path/to/agent`**.
+
+**Windows — quick checklist**
+
+1. **Go** from [go.dev/dl](https://go.dev/dl/); **`go version`**.
+2. **Git for Windows**; **`git`** on **`PATH`**.
+3. **`gh auth login`** / **`gh auth status`** in PowerShell.
+4. **`Get-Command agent`** in a **new** terminal after install; or **`--agent`** with a full path to **`agent.exe`**.
+
+---
+
+## Common ways to run
+
+Install **`jrdev`** first (see **[Install and build](#install-and-build)**) so the binary is on your **`PATH`**—on Windows the default install dir is **`%USERPROFILE%\go\bin`** unless **`GOBIN`** is set.
+
+```text
+# Show all flags and examples
+jrdev help
+
+# Create or finish .jrdev/config.yaml (TTY only; embedded language presets)
+jrdev init
+
+# Queue sizing + preflight only (no agent smoke; stops before worktrees)
+jrdev --dry-run
+
+# Full run (preflight includes a minimal agent smoke unless --dry-run)
+jrdev
+
+# Start a new integration run even if a prior agent-queue/run-… worktree exists
+jrdev --fresh
+
+# Cap the outer loop (default is 2N+3 for N = open labeled issues at start)
+jrdev --max-iterations 20
+```
+
+On Windows, use **`jrdev.exe`** if your shell resolves that more reliably than **`jrdev`**.
+
+On a **TTY**, a **successful** full run ends with a prompt: remove **`--worktrees`** and local **`agent-queue/*`** branches, or leave them to inspect prompts and diffs first.
+
+**From your application repo** (the repo that has the queued issues):
+
+```bash
+cd /path/to/your-app
+jrdev --dry-run   # then drop --dry-run for a full run
+```
+
+**Developing `jrdev` from a clone:** you can run **`go run . help`**, **`go run . init`**, and so on from the repository root instead of **`jrdev`**—behavior matches the same CLI.
+
+---
+
+## Install and build
+
+### Requirements
 
 | Requirement | Notes |
 |-------------|--------|
 | **Go** | Version **1.26** or newer (see `go.mod`). [Install Go](https://go.dev/doc/install). |
-| **Git** | Used for repository detection, worktrees, and branches. |
-| **GitHub CLI (`gh`)** | Must be installed and **logged in** with access to the repo you automate. [Install gh](https://cli.github.com/). |
-| **Cursor `agent`** | The Cursor agent CLI must be on your **`PATH`** (or pass **`--agent`** with the full path to the binary). This is what runs the plan / implement / review steps. |
+| **Git** | Repository detection, worktrees, branches. |
+| **GitHub CLI (`gh`)** | [Install gh](https://cli.github.com/); logged in with access to the repo you automate. |
+| **Cursor `agent`** | On **`PATH`** or **`--agent`**. |
 
-**Target repository:** Run `jrdev` with your **current working directory inside the project you want to automate** (any subfolder is fine), or pass **`--repo`** with the absolute path to that project’s root. The tool finds the git root by walking up for `.git`.
+### Install `jrdev` (recommended)
 
-**Network / auth:** `gh` uses your normal GitHub authentication (`gh auth login`). For git operations, SSH or HTTPS credentials for `git push` / `git fetch` must work for that repo. On **`git fetch`** / **`git push`**, if the error looks like an SSH public-key failure, `jrdev` attempts a one-time interactive **`ssh-add`** recovery (requires a real TTY). If that still fails, follow the hints in the error or load your key before running `jrdev`.
+Put Go’s install directory on your **`PATH`** (**`$GOBIN`**, **`$GOPATH/bin`**, or **`%USERPROFILE%\go\bin`** on Windows when using defaults).
 
-## Cursor agent CLI permissions (`-p` / headless)
+**Public module:**
 
-The Cursor **`agent`** CLI enforces **permissions** from [`cli-config.json`](https://cursor.com/docs/cli/reference/configuration) (global, project, or via **`CURSOR_CONFIG_DIR`**). In non-interactive mode, **shell** tools such as **`git`** or **`go`** only run if your config **allows** them.
-
-If you pass **`--agent-permissions`** or **`--agent-cursor-config-dir`**, that value is used and repo / executable discovery is skipped (**`--agent-cursor-config-dir`** and **`--agent-permissions`** cannot be combined).
-
-When **neither** flag is set: **`repo/.cursor/cli-config.json`** (if present), otherwise **`jrdev-agent-permissions.json`** next to the **`jrdev`** binary (if present). If neither exists, `jrdev` does not set **`CURSOR_CONFIG_DIR`** (the agent uses your normal Cursor global / project config only).
-
-Mechanisms:
-
-| Source | When |
-|--------|------|
-| **`--agent-cursor-config-dir`** | Directory that contains **`cli-config.json`** (passed through as **`CURSOR_CONFIG_DIR`**). Mutually exclusive with **`--agent-permissions`**. |
-| **`--agent-permissions`** | Path to a small JSON file: **`{"allow":["git","go"],"deny":[]}`**. Each bare name becomes a Cursor **`Shell(name)`** entry; strings that already look like permission tokens (they contain **`(`**) are left as-is. `jrdev` writes a temporary **`cli-config.json`** (and always includes **`Read(**)`** / **`Write(**)`** so file tools still work while overriding the global config). |
-| **`<repo>/.cursor/cli-config.json`** | If neither flag is set and this file exists, **`CURSOR_CONFIG_DIR`** is **`<repo>/.cursor`**. |
-| **`jrdev-agent-permissions.json`** next to the **`jrdev` executable** | If nothing above applies and this file exists, it is used like **`--agent-permissions`**. |
-
-For the full permission vocabulary (**`Read`**, **`Write`**, **`WebFetch`**, **`Mcp`**, **`Shell`** patterns), see Cursor’s [permissions reference](https://cursor.com/docs/cli/reference/permissions).
-
-**Example** `jrdev-agent-permissions.json` (or **`--agent-permissions`** file):
-
-```json
-{
-  "allow": ["git", "go", "gh"],
-  "deny": []
-}
+```bash
+go install github.com/NUSAlaska/jrdev@latest
 ```
 
-With **`-v` / `--verbose`**, startup logs show whether a repo **`.cursor`** directory, a permissions file path, or **`--agent-cursor-config-dir`** is in effect.
+**Private module:** configure fetch and auth, then install the same way:
 
-Some Cursor docs describe project permissions only in **`.cursor/cli.json`**. `jrdev` auto-discovery specifically looks for **`.cursor/cli-config.json`** next to the git root so the directory can serve as **`CURSOR_CONFIG_DIR`** (full `cli-config.json` layout). If you only have **`cli.json`**, use **`--agent-cursor-config-dir`** pointing at a folder that contains the `cli-config.json` name your install expects, or maintain **`cli-config.json`** in **`.cursor`**.
-
-## Linux — getting set up
-
-1. **Install Go** (distribution packages are often old; prefer the official tarball or your distro’s backported `go` 1.26+).
-2. **Install Git** (e.g. `sudo apt install git` on Debian/Ubuntu).
-3. **Install `gh`** and sign in:
-   ```bash
-   gh auth login
-   gh auth status
-   ```
-4. **Install Cursor and ensure `agent` is on `PATH`.** After install, verify:
-   ```bash
-   command -v agent
-   agent --help   # or your installed CLI’s help flag
-   ```
-   If the binary lives outside `PATH`, use **`jrdev --agent /full/path/to/agent`**.
-5. **Get `jrdev`:**
-   - **From a local clone** (common for a private org repo):
-     ```bash
-     cd /path/to/jrdev
-     go build -o jrdev .
-     # optional: install into Go’s bin directory
-     go install .
-     ```
-     Ensure **`$GOBIN`** or **`$GOPATH/bin`** is on your **`PATH`** if you use `go install`.
-   - **From GitHub** (module path matches the repo):
-     ```bash
-     go install github.com/NUSAlaska/jrdev@latest
-     ```
-     For a **private** module, configure module privacy and git access, for example:
-     ```bash
-     go env -w GOPRIVATE=github.com/NUSAlaska/*
-     ```
-     Use SSH or a configured credential helper so `go` can fetch the module.
-
-6. **Run from your application repo** (the repo that has the queued issues), not from the `jrdev` tree unless you only use **`--repo`**:
-   ```bash
-   cd /path/to/your-app
-   jrdev --dry-run
-   ```
-   Use the **`jrdev`** binary from **`go install .`** / **`go build`**, or invoke the full path to the built binary.
-
-## Windows — getting set up
-
-1. **Install Go** from [go.dev/dl](https://go.dev/dl/) and confirm:
-   ```powershell
-   go version
-   ```
-2. **Install Git for Windows** if you do not already have it; use Git Bash or PowerShell with `git` on `PATH`.
-3. **Install `gh`** ([installer](https://cli.github.com/)), then in PowerShell:
-   ```powershell
-   gh auth login
-   gh auth status
-   ```
-4. **Cursor `agent`:** Install Cursor and add the directory containing **`agent.exe`** to your **user or system `PATH`**, or pass **`--agent`** with a full path (e.g. `C:\Users\You\AppData\Local\Programs\Cursor\...`). Verify in a **new** terminal:
-   ```powershell
-   Get-Command agent
-   ```
-5. **Build or install `jrdev` from a clone:**
-   ```powershell
-   cd C:\path\to\jrdev
-   go build -o jrdev.exe .
-   ```
-   Or install Go’s bin folder onto `PATH` and run:
-   ```powershell
-   go install .
-   ```
-   Binaries go to **`%USERPROFILE%\go\bin`** unless **`GOBIN`** is set—add that folder to **PATH** in *Settings → Environment variables* so `jrdev` runs from anywhere.
-
-6. **Private `go install` from GitHub:** Same as Linux: set `GOPRIVATE` for your org and ensure Git can authenticate to GitHub. **To avoid remote fetch entirely**, use **`go install .`** or **`go build`** from a local clone.
-
-7. **Run against your app repo:**
-   ```powershell
-   cd C:\path\to\your-app
-   jrdev --dry-run
-   ```
-
-## Quick start (from `jrdev` source tree)
-
-```text
-# Show all flags and examples
-go run . help
-
-# Create or finish .jrdev/config.yaml (TTY only; embedded language presets)
-go run . init
-
-# Queue sizing + preflight only (no agent smoke; stops before worktrees)
-go run . --dry-run
-
-# Full run (preflight includes a minimal agent smoke unless --dry-run)
-go run .
-
-# Start a new integration run even if a prior agent-queue/run-… worktree exists
-go run . --fresh
-
-# Cap the outer loop (default is 2N+3 for N = open labeled issues at start)
-go run . --max-iterations 20
+```bash
+go env -w GOPRIVATE=github.com/NUSAlaska/*
+go install github.com/NUSAlaska/jrdev@latest
 ```
 
-On a **terminal** (interactive stdin), a **successful** full run ends with a prompt: remove **`--worktrees`** and local **`agent-queue/*`** branches, or leave them to inspect prompts and diffs first.
+Use SSH or a credential helper so **`go`** can clone or download the module.
 
-After `go install .`, replace `go run .` with **`jrdev`** (or **`jrdev.exe`**) on `PATH`.
+### From a local clone (optional)
 
-## Repository configuration (`.jrdev/config.yaml`)
+If you prefer not to install from the network, or you are hacking on **`jrdev`**:
 
-Before the **plan → implement → review → merge** loop, jrdev loads a small YAML file. Use **`--config path`** to point at a file; the default is **`<repo>/.jrdev/config.yaml`**.
+**Linux / macOS:**
 
-- **`config_ready`**: must be **`true`** for the pipeline to run. While it is **`false`**, an interactive terminal can finish setup via **`jrdev init`** or the auto-started wizard; **non-interactive** runs exit with an error and tell you to run **`jrdev init`** in a real terminal.
-- **`lint`**, **`unit`**, **`integration`**: optional YAML lists of shell commands. They are rendered into agent prompts (**implement** / **review** use **lint** + **unit**; **merge** uses **integration**). **jrdev does not run a separate post-merge `go vet` / `go test` gate** on your target repo—the lists you configure are what the agents are asked to execute.
-- If all three lists are empty but **`config_ready`** is **`true`**, prompts include one explicit **no checks configured** paragraph (same text in **lint** / **unit** / **integration** sections of the template) so it is obvious the repo chose empty checks.
-- **`meta`**: optional key/value map (for example **`source_preset`** after **`jrdev init`**, or **`integration_blocked_action`** for **`JRDEV_INTEGRATION_BLOCKED:`** handling). Configuration is read only from this file (and **`--config`**); v1 does not load repo config from environment variables.
+```bash
+cd /path/to/jrdev
+go install .
+```
 
-Background and roadmap (without duplicating the full spec): [jrdev PRD — issue #1](https://github.com/NUSAlaska/jrdev/issues/1).
+**Windows:**
+
+```powershell
+cd C:\path\to\jrdev
+go install .
+```
+
+To produce a binary in the current directory without installing into **`GOBIN`**, use **`go build -o jrdev`** (or **`jrdev.exe`** on Windows) from the repo root.
+
+---
 
 ## `jrdev init` and presets (TTY vs non-interactive)
 
-**Language presets** live under **`internal/jrdev/presets/`** in source and are **embedded in the jrdev binary**. The wizard discovers them at runtime—**`go install`** / **`go build`** carry the same catalog, no extra files required beside **`config.yaml`**.
+**Language presets** live under **`internal/jrdev/presets/`** and are **embedded in the binary**.
 
 | Situation | Behavior |
 |-----------|----------|
-| **`jrdev init`** | Requires an **interactive terminal** (stdin is a TTY). If **`config_ready`** is already **`true`**, prints a short message and exits **0**. Otherwise: pick a preset (number or id), jrdev writes **`.jrdev/config.yaml`** with **`meta.source_preset`**, preset **lint** / **unit** / **integration** commands, and **`config_ready: false`**; you can edit the file, then confirm in the terminal so jrdev sets **`config_ready: true`**. |
-| **`jrdev` with missing config** | **TTY**: runs the same wizard as **`jrdev init`**. **Non-TTY**: writes a minimal **stub** (`config_ready: false`, empty lists, **no** `meta`) and exits **1** with a hint to run **`jrdev init`**. |
-| **jrdev run, config on disk but not ready** | **TTY**: wizard path again. **Non-TTY**: exits **1** (finish setup in a terminal). |
+| **`jrdev init`** | **TTY** only. If **`config_ready`** is already **`true`**, exits **0**. Otherwise: preset → writes **`.jrdev/config.yaml`**; you edit and confirm → **`config_ready: true`**. |
+| **`jrdev` with missing config** | **TTY**: same wizard as **`jrdev init`**. **Non-TTY**: stub file, exit **1**, hint **`jrdev init`**. |
+| **Run with config not ready** | **TTY**: wizard. **Non-TTY**: exit **1**. |
+
+---
 
 ## Integration blocked (`JRDEV_INTEGRATION_BLOCKED:`)
 
-During **merge**, the agent may print **one line** starting with **`JRDEV_INTEGRATION_BLOCKED:`** when integration checks from the config cannot pass after a reasonable attempt (details in **`prompt_merge.md`**). The line may include a short reason after the colon. The merge phase must still end with **`COMPLETE`** as usual.
+During **merge**, the agent may print a line starting with **`JRDEV_INTEGRATION_BLOCKED:`** when integration checks cannot pass after a reasonable attempt (see **`prompt_merge.md`**). The merge phase must still end with **`COMPLETE`**.
 
 Resolution order:
 
-1. **`--integration-blocked abort`** or **`merge`** — forces the outcome; overrides **`meta.integration_blocked_action`**.
-2. Else **`meta.integration_blocked_action`** in **`.jrdev/config.yaml`** (**`abort`** or **`merge`**). Invalid or missing values fall through.
-3. Else **interactive stdin (TTY)**: prompt **Abort** vs **Merge (waive)** — default is abort.
-4. Else **non-interactive**: default is **abort** if meta does not supply a valid **`abort`** / **`merge`**.
+1. **`--integration-blocked abort`** or **`merge`** — overrides **`meta.integration_blocked_action`**.
+2. Else **`meta.integration_blocked_action`** in **`config.yaml`** (**`abort`** or **`merge`**).
+3. Else **TTY**: prompt **Abort** vs **Merge (waive)** — default abort.
+4. Else **non-interactive**: default **abort** unless meta sets a valid action.
 
-**Abort** leaves the issue open and, if the agent had already merged into the integration worktree, resets that worktree using **`ORIG_HEAD`**. **Merge (waive)** continues the usual close-label-push path without jrdev re-running integration for that merge attempt.
+**Abort** leaves the issue open and may reset the integration worktree from **`ORIG_HEAD`**. **Merge (waive)** continues close-label-push without re-running integration for that attempt.
+
+---
 
 ## Trust model (v1)
 
-**Preflight** still validates **`git`**, **`gh`**, and (unless **`--dry-run`**) a token-only **agent** smoke—it does **not** execute your **lint** / **unit** / **integration** lists. During **implement**, **review**, and **merge**, those commands appear in the rendered prompts; the **Cursor agent** is expected to run them in the relevant worktree. There is **no** separate jrdev-side “verify pass” after the agent finishes in v1—checks are in the agent loop only.
+**Preflight** validates **`git`**, **`gh`**, and (unless **`--dry-run`**) a token-only **agent** smoke—it does **not** run your **lint** / **unit** / **integration** lists. During **implement**, **review**, and **merge**, those commands appear in prompts; the agent is expected to run them. There is **no** separate jrdev-side verify-after-agent step in v1.
+
+---
 
 ## Flags
 
 | Flag | Default | Purpose |
 |------|---------|---------|
 | `--repo` | (walk up) | Git repository root |
-| `--config` | `<repo>/.jrdev/config.yaml` | Repository jrdev YAML (`config_ready`, `lint` / `unit` / `integration` command lists); must exist and have `config_ready: true` before the pipeline runs |
-| `--integration-blocked` | — | When merge output contains `JRDEV_INTEGRATION_BLOCKED:` — force **`abort`** or **`merge`** (waive); overrides **`meta.integration_blocked_action`**; non-interactive default is **abort** unless meta sets a valid action |
-| `--worktrees` | `.worktrees` | Directory under repo for worktrees (should be gitignored) |
+| `--config` | `<repo>/.jrdev/config.yaml` | `config_ready`, command lists; must be ready before the pipeline runs |
+| `--integration-blocked` | — | On `JRDEV_INTEGRATION_BLOCKED:` — force **`abort`** or **`merge`** |
+| `--worktrees` | `.worktrees` | Worktree directory (should be gitignored) |
 | `--label` | `agent-queue` | Queue label |
-| `--dry-run` | off | Skip agent smoke in preflight; exit before creating integration/issue worktrees |
-| `--skip-pr` | off | Do not `gh pr create` when the loop finishes (end-of-run cleanup prompt still runs on a TTY) |
+| `--dry-run` | off | Skip agent smoke in preflight; exit before issue worktrees |
+| `--skip-pr` | off | Do not `gh pr create` at end |
 | `--max-iterations` | `2N+3` | Outer loop cap |
-| `--integration-base` | `origin/main` | Base ref for new `agent-queue/run-…` branch |
-| `--fresh` | off | Discard prior jrdev state: remove worktrees under `--worktrees` and local `agent-queue/run-*` / `agent-queue/issue-*` branches; skip the resume prompt (always start a new integration run) |
+| `--integration-base` | `origin/main` | Base for new `agent-queue/run-…` branch |
+| `--fresh` | off | Remove jrdev worktrees and local `agent-queue/run-*` / `agent-queue/issue-*` branches; start clean |
 | `--agent` | `agent` on PATH | Cursor agent binary |
-| `--agent-model` | `composer-2-fast` | Value passed to Cursor agent as `--model` |
-| `--agent-permissions` | (see [permissions](#cursor-agent-cli-permissions--p--headless)) | JSON allow/deny file; `jrdev` materializes `cli-config.json` and sets `CURSOR_CONFIG_DIR` |
-| `--agent-cursor-config-dir` | — | Use this directory as `CURSOR_CONFIG_DIR` (must contain `cli-config.json`); mutually exclusive with `--agent-permissions` |
+| `--agent-model` | `composer-2-fast` | Passed to agent as `--model` |
+| `--agent-permissions` | (see [Configure the Cursor agent](#configure-the-cursor-agent-cliconfigjson)) | JSON allow/deny; materializes `cli-config.json` |
+| `--agent-cursor-config-dir` | — | `CURSOR_CONFIG_DIR`; mutually exclusive with `--agent-permissions` |
 | `--gh` | `gh` | GitHub CLI binary |
-| `-v` / `--verbose` | off | Verbose preflight, per-cycle phases, agent invocation summary, git subprocess output |
-| `-help`, `-h` | — | Print usage and exit |
+| `-v` / `--verbose` | off | Verbose logging |
+| `-help`, `-h` | — | Usage |
+
+---
 
 ## Behavior (summary)
 
-1. **N** = count of open issues with the queue label; if **N == 0**, exit cleanly.
-2. **Preflight** (once): `git` on PATH and `git version`, `gh auth status`, **`agent`** resolved and able to run `-h` / `--help`; unless `--dry-run`, a minimal **`agent -p`** smoke that must print a fixed token (that prompt forbids shell commands and file edits). Agent invocations use the [permission / `CURSOR_CONFIG_DIR`](#cursor-agent-cli-permissions--p--headless) rules above.
-3. **Integration worktree**: After `git fetch origin`, if a prior run left a resumable **`agent-queue/run-…`** worktree under **`--worktrees`**, an **interactive** terminal prompts: **continue** with that branch and worktree, or **clean** and start fresh (same cleanup as **`--fresh`**). With **non-interactive** stdin, jrdev **resumes** automatically when possible and logs a hint to use **`--fresh`** if you want a clean run. **`--fresh`** skips the prompt and always clears that jrdev state, then creates a new **`agent-queue/run-<timestamp>`** and worktree from **`--integration-base`**.
-4. Each **cycle**: plan (in integration worktree) → parse `<plan>…</plan>` JSON → **one** issue (first row) → issue worktree from integration tip → **implement**, **review** (if there are commits), and **merge** agent phases each loop until stdout contains **`COMPLETE`**, re-rendering the prompt with fresh git history/diff on every attempt (cap: 25 tries per phase); if implement produces zero commits, that phase runs again once the same way → the **merge** prompt directs the agent to run the **integration** commands from **`.jrdev/config.yaml`** after merging → **`git merge`** into the integration worktree (by the agent and/or `jrdev` if needed). If the agent prints **`JRDEV_INTEGRATION_BLOCKED:`**, jrdev applies **`--integration-blocked`**, **`meta.integration_blocked_action`**, or an interactive prompt, then either aborts (issue stays open; integration worktree may reset) or waives and continues. On success: **`gh issue close`** and remove label → push integration branch. **There is no subprocess `go vet` / `go test` quality gate after merge**; preflight is unchanged. **Issue worktrees and `agent-queue/issue-…` branches are not removed here**—they stay under **`--worktrees`** so you can inspect transcripts and diffs across every issue processed in the run.
-5. Stops when the plan returns **`issues: []`**, or **max iterations** is reached, then **`gh pr create`** to **`main`** unless **`--skip-pr`**.
-6. **End of a successful run**: On an **interactive** terminal (real TTY on stdin), `jrdev` asks whether to remove **all** jrdev-linked worktrees under **`--worktrees`** and delete local **`agent-queue/run-*`** / **`agent-queue/issue-*`** branches—the same scope as **`--fresh`**. **Y** / **yes** performs that cleanup; anything else (including Enter) **leaves** trees and branches for inspection. With **non-interactive** stdin (piped or CI), there is **no** prompt and **no** automatic cleanup; run **`jrdev --fresh`** before the next run if you want a clean slate, or delete worktrees/branches manually.
+1. **N** = open issues with the queue label; if **N == 0**, exit cleanly.
+2. **Preflight**: **`git`**, **`gh auth status`**, **`agent`** help; unless **`--dry-run`**, minimal **`agent -p`** smoke (fixed token; no shell/file edits). Uses **[permission / `CURSOR_CONFIG_DIR`](#configure-the-cursor-agent-cliconfigjson)** rules.
+3. **Integration worktree**: After **`git fetch origin`**, if a resumable **`agent-queue/run-…`** exists under **`--worktrees`**, **TTY** prompts continue vs clean (**`--fresh`** skips prompt and cleans). **Non-TTY** resumes when possible.
+4. Each **cycle**: plan → parse **`<plan>…</plan>`** → first queued issue → issue worktree → **implement**, **review** (if commits), **merge** (agent loops until **`COMPLETE`**, up to 25 tries per phase); **merge** includes **integration** commands from config. On **`JRDEV_INTEGRATION_BLOCKED:`**, apply flags/meta/prompt as above. On success: close issue, remove label, push integration branch. Issue worktrees and **`agent-queue/issue-…`** branches remain under **`--worktrees`** for inspection.
+5. Stops when plan returns **`issues: []`** or **max iterations**, then **`gh pr create`** unless **`--skip-pr`**.
+6. **Successful TTY end**: optional cleanup of all jrdev worktrees under **`--worktrees`** and local **`agent-queue/run-*`** / **`agent-queue/issue-*`** branches. **Non-interactive**: no cleanup; use **`--fresh`** next time if desired.
 
-`main` is never merged by the tool directly; landing on `main` is via PR only.
+`main` is never merged by the tool directly; landing is via PR only.
+
+---
 
 ## Local agent transcripts (`.jrdev/`)
 
-Every Cursor **`agent`** invocation **`jrdev`** launches (preflight smoke, plan, implement, review, merge) stores the **full prompt** and the **combined stdout/stderr** of that run under the **process working directory** for that step—the **git repo root** during preflight, or the **integration / issue worktree** during the main loop:
+Every **`agent`** invocation stores **prompt** and **combined stdout/stderr** under the cwd for that step (repo root or worktree):
 
 | Path | Contents |
 |------|----------|
-| **`.jrdev/agent-runs/<timestamp>-<pid>/prompt.md`** | Exact prompt text passed to the agent (via `-p` pointing at this path, relative to that cwd). |
-| **`.jrdev/agent-runs/<timestamp>-<pid>/output.md`** | Everything the agent process printed (success or failure). |
+| **`.jrdev/agent-runs/<timestamp>-<pid>/prompt.md`** | Prompt passed to the agent |
+| **`.jrdev/agent-runs/<timestamp>-<pid>/output.md`** | Agent process output |
 
-The first time artifacts are written in a given worktree, **`jrdev`** creates **`.jrdev/.gitignore`** listing **`agent-runs/`** only, so prompts and transcripts under **`.jrdev/agent-runs/`** stay ignored while **`.jrdev/config.yaml`** can remain tracked. If your **`--worktrees`** directory is already gitignored (recommended), those paths usually stay hidden from **`git status`** entirely.
+The first write creates **`.jrdev/.gitignore`** with **`agent-runs/`** so transcripts stay ignored while **`config.yaml`** may stay tracked.
 
-If you run from the **repo root** and **`--worktrees`** is not under an ignored path, add **`.jrdev/agent-runs/`** to your **repository root** `.gitignore` (not all of **`.jrdev/`**—you normally want **`config.yaml`** commit-visible).
+If **`--worktrees`** is not ignored, add **`.jrdev/agent-runs/`** at the repo root **`.gitignore`** (not necessarily all of **`.jrdev/`**).
 
-With **`-v` / `--verbose`**, logs include the artifact directory for each agent run—useful to open the matching **`prompt.md`** and **`output.md`** after a failure.
+With **`-v`**, logs include artifact paths for debugging.
+
+---
 
 ## Failure and recovery
 
-- **Successful run, worktrees still on disk**: Until you answer **Y** at the end-of-run prompt (TTY) or run **`--fresh`**, integration and issue worktrees remain under **`--worktrees`** with **`.jrdev/agent-runs/`** and branches **`agent-queue/run-…`** / **`agent-queue/issue-…`** so you can review everything from one session.
-- **Interrupted run (Ctrl+C, crash, merge failure, etc.)**: The integration branch and worktrees under **`--worktrees`** are usually left in place (there is **no** end-of-run cleanup prompt because the run did not finish cleanly). On the **next** full run, if a valid **`agent-queue/run-…`** worktree still exists, you get a **resume vs fresh** prompt (TTY) or an automatic **resume** (non-interactive). Choose **fresh** in the prompt, or run **`jrdev --fresh`**, to remove jrdev worktrees under **`--worktrees`** and local **`agent-queue/run-*`** / **`agent-queue/issue-*`** branches before starting a new run.
-- **Zero commits after implement retry**: run aborts; issue is not closed; integration branch and worktrees remain under `.worktrees/` for inspection.
-- **Agent phase never prints `COMPLETE`** (after 25 attempts on implement, review, or merge): run aborts with an error; prompts should instruct the model to include `COMPLETE` when the phase is finished.
-- **Merge or integration-check failure** (commands from **`.jrdev/config.yaml`**): fix locally in the integration or issue worktree, or remove worktrees/branches manually (or **`--fresh`** / **fresh** at the resume prompt).
-- **SSH auth to `origin`**: ensure `ssh-add` / agent (or HTTPS) works; see **Network / auth** above. **Non-interactive** environments cannot complete interactive `ssh-add` recovery.
-- **Agent smoke or plan/implement errors about blocked tools**: configure **[Cursor agent CLI permissions](#cursor-agent-cli-permissions--p--headless)** (`repo/.cursor/cli-config.json`, `jrdev-agent-permissions.json`, or flags).
-- **Debugging agent failures**: inspect the latest directories under **`.jrdev/agent-runs/`** in the relevant cwd (repo root for smoke, integration or issue worktree for orchestration); see **[Local agent transcripts (`.jrdev/`)](#local-agent-transcripts-jrdev)**.
+- **Successful run, worktrees left**: answer **Y** at end prompt (TTY) or run **`--fresh`** to clean.
+- **Interrupted run**: integration branch/worktrees usually remain; next run may **resume** (TTY prompt or auto). Use **`--fresh`** for a clean start.
+- **Zero commits after implement retry**: run aborts; issue stays open.
+- **Phase never prints `COMPLETE`** (after 25 attempts): run aborts.
+- **Merge / integration failures**: fix locally or **`--fresh`** / **fresh** at resume prompt.
+- **SSH to `origin`**: fix **`ssh-add`** / keys; non-interactive cannot complete interactive **`ssh-add`** recovery.
+- **Blocked tools in agent**: fix **[`cli-config.json` / permissions](#configure-the-cursor-agent-cliconfigjson)**.
+- **Debugging**: latest **`.jrdev/agent-runs/`** under the relevant cwd.
 
-See **`PROMPTS.md`** for template placeholders in the embedded prompts.
+See **`PROMPTS.md`** for template placeholders in embedded prompts.
