@@ -1,0 +1,6 @@
+meta:
+  id: dup-id
+  title: One
+  description: duplicate id
+unit:
+  - echo one

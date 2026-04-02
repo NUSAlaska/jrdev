@@ -193,6 +193,7 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 		}
 		vlog(cfg, log, "jrdev: verbose: issue worktree base SHA %s\n", baseSHA)
 
+		proj := cfg.Project
 		implData := ImplementPromptData{
 			IssueNumber:       job.Number,
 			IssueTitle:        job.Title,
@@ -200,6 +201,8 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 			IssueBranch:       job.Branch,
 			IntegrationBranch: integrationBranch,
 			QueueLabel:        cfg.Label,
+			LintTests:         PromptLintTests(proj),
+			UnitTests:         PromptUnitTests(proj),
 		}
 		renderImplement := func() (string, error) {
 			var err error
@@ -272,6 +275,9 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 			IssueBranch:       job.Branch,
 			IntegrationBranch: integrationBranch,
 			QueueLabel:        cfg.Label,
+			LintTests:         PromptLintTests(proj),
+			UnitTests:         PromptUnitTests(proj),
+			IntegrationTests:  PromptIntegrationTests(proj),
 		}
 		renderMerge := func() (string, error) {
 			var err error
@@ -285,13 +291,29 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 			}
 			return Render("merge", prompts.Merge, mergeData)
 		}
-		if _, err := runAgentUntilComplete(cfg, agent, log, "merge", intPath, renderMerge); err != nil {
+		mergeOut, err := runAgentUntilComplete(cfg, agent, log, "merge", intPath, renderMerge)
+		if err != nil {
 			return fmt.Errorf("merge phase: %w", err)
 		}
-		merged, err := BranchMergedIntoHead(intPath, job.Branch)
+		mergedAfterAgent, err := BranchMergedIntoHead(intPath, job.Branch)
 		if err != nil {
 			return err
 		}
+		if blocked, ibReason := IntegrationBlockedFromStdout(mergeOut); blocked {
+			waive, err := ResolveIntegrationBlockedDecision(cfg, os.Stdin, os.Stderr, log, ibReason, StdinIsInteractive())
+			if err != nil {
+				return err
+			}
+			if !waive {
+				if mergedAfterAgent {
+					if rerr := ResetHardToORIG_HEAD(intPath); rerr != nil {
+						log("jrdev: warning: integration abort could not reset worktree: %v\n", rerr)
+					}
+				}
+				return fmt.Errorf("jrdev: integration blocked — aborted (issue #%d left open)", job.Number)
+			}
+		}
+		merged := mergedAfterAgent
 		vlog(cfg, log, "jrdev: verbose: branch %q already merged into integration HEAD: %v\n", job.Branch, merged)
 		if !merged {
 			vlog(cfg, log, "jrdev: verbose: git merge %q into integration at %s\n", job.Branch, intPath)
@@ -299,11 +321,6 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 				return fmt.Errorf("merge %s into integration: %w", job.Branch, err)
 			}
 		}
-		vlog(cfg, log, "jrdev: verbose: quality gate go vet ./... && go test ./... in %s\n", intPath)
-		if err := GoVetTest(intPath); err != nil {
-			return fmt.Errorf("post-merge quality gate: %w", err)
-		}
-		vlog(cfg, log, "jrdev: verbose: quality gate passed\n")
 
 		comment := fmt.Sprintf("Merged into integration branch %s via jrdev.", integrationBranch)
 		vlog(cfg, log, "jrdev: verbose: gh issue close %d + remove label %q\n", job.Number, cfg.Label)

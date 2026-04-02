@@ -1,0 +1,11 @@
+# jrdev repository pipeline config (issue #3 / parent PRD #1)
+config_ready: true
+
+lint:
+  - go vet ./...
+
+unit:
+  - go test ./...
+
+integration:
+  - go test -count=1 ./...

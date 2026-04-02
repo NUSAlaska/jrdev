@@ -1,0 +1,9 @@
+meta:
+  id: typescript
+  title: TypeScript
+  description: Node / tsc workflow
+lint:
+  - npx eslint .
+unit:
+  - npm test
+integration: []

@@ -1,0 +1,8 @@
+meta:
+  id: rust
+  title: Rust
+  description: Cargo-based workflow
+lint:
+  - cargo clippy
+unit:
+  - cargo test

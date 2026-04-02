@@ -129,6 +129,9 @@ Some Cursor docs describe project permissions only in **`.cursor/cli.json`**. `j
 # Show all flags and examples
 go run . help
 
+# Create or finish .jrdev/config.yaml (TTY only; embedded language presets)
+go run . init
+
 # Queue sizing + preflight only (no agent smoke; stops before worktrees)
 go run . --dry-run
 
@@ -146,11 +149,51 @@ On a **terminal** (interactive stdin), a **successful** full run ends with a pro
 
 After `go install .`, replace `go run .` with **`jrdev`** (or **`jrdev.exe`**) on `PATH`.
 
+## Repository configuration (`.jrdev/config.yaml`)
+
+Before the **plan → implement → review → merge** loop, jrdev loads a small YAML file. Use **`--config path`** to point at a file; the default is **`<repo>/.jrdev/config.yaml`**.
+
+- **`config_ready`**: must be **`true`** for the pipeline to run. While it is **`false`**, an interactive terminal can finish setup via **`jrdev init`** or the auto-started wizard; **non-interactive** runs exit with an error and tell you to run **`jrdev init`** in a real terminal.
+- **`lint`**, **`unit`**, **`integration`**: optional YAML lists of shell commands. They are rendered into agent prompts (**implement** / **review** use **lint** + **unit**; **merge** uses **integration**). **jrdev does not run a separate post-merge `go vet` / `go test` gate** on your target repo—the lists you configure are what the agents are asked to execute.
+- If all three lists are empty but **`config_ready`** is **`true`**, prompts include one explicit **no checks configured** paragraph (same text in **lint** / **unit** / **integration** sections of the template) so it is obvious the repo chose empty checks.
+- **`meta`**: optional key/value map (for example **`source_preset`** after **`jrdev init`**, or **`integration_blocked_action`** for **`JRDEV_INTEGRATION_BLOCKED:`** handling). Configuration is read only from this file (and **`--config`**); v1 does not load repo config from environment variables.
+
+Background and roadmap (without duplicating the full spec): [jrdev PRD — issue #1](https://github.com/NUSAlaska/jrdev/issues/1).
+
+## `jrdev init` and presets (TTY vs non-interactive)
+
+**Language presets** live under **`internal/jrdev/presets/`** in source and are **embedded in the jrdev binary**. The wizard discovers them at runtime—**`go install`** / **`go build`** carry the same catalog, no extra files required beside **`config.yaml`**.
+
+| Situation | Behavior |
+|-----------|----------|
+| **`jrdev init`** | Requires an **interactive terminal** (stdin is a TTY). If **`config_ready`** is already **`true`**, prints a short message and exits **0**. Otherwise: pick a preset (number or id), jrdev writes **`.jrdev/config.yaml`** with **`meta.source_preset`**, preset **lint** / **unit** / **integration** commands, and **`config_ready: false`**; you can edit the file, then confirm in the terminal so jrdev sets **`config_ready: true`**. |
+| **`jrdev` with missing config** | **TTY**: runs the same wizard as **`jrdev init`**. **Non-TTY**: writes a minimal **stub** (`config_ready: false`, empty lists, **no** `meta`) and exits **1** with a hint to run **`jrdev init`**. |
+| **jrdev run, config on disk but not ready** | **TTY**: wizard path again. **Non-TTY**: exits **1** (finish setup in a terminal). |
+
+## Integration blocked (`JRDEV_INTEGRATION_BLOCKED:`)
+
+During **merge**, the agent may print **one line** starting with **`JRDEV_INTEGRATION_BLOCKED:`** when integration checks from the config cannot pass after a reasonable attempt (details in **`prompt_merge.md`**). The line may include a short reason after the colon. The merge phase must still end with **`COMPLETE`** as usual.
+
+Resolution order:
+
+1. **`--integration-blocked abort`** or **`merge`** — forces the outcome; overrides **`meta.integration_blocked_action`**.
+2. Else **`meta.integration_blocked_action`** in **`.jrdev/config.yaml`** (**`abort`** or **`merge`**). Invalid or missing values fall through.
+3. Else **interactive stdin (TTY)**: prompt **Abort** vs **Merge (waive)** — default is abort.
+4. Else **non-interactive**: default is **abort** if meta does not supply a valid **`abort`** / **`merge`**.
+
+**Abort** leaves the issue open and, if the agent had already merged into the integration worktree, resets that worktree using **`ORIG_HEAD`**. **Merge (waive)** continues the usual close-label-push path without jrdev re-running integration for that merge attempt.
+
+## Trust model (v1)
+
+**Preflight** still validates **`git`**, **`gh`**, and (unless **`--dry-run`**) a token-only **agent** smoke—it does **not** execute your **lint** / **unit** / **integration** lists. During **implement**, **review**, and **merge**, those commands appear in the rendered prompts; the **Cursor agent** is expected to run them in the relevant worktree. There is **no** separate jrdev-side “verify pass” after the agent finishes in v1—checks are in the agent loop only.
+
 ## Flags
 
 | Flag | Default | Purpose |
 |------|---------|---------|
 | `--repo` | (walk up) | Git repository root |
+| `--config` | `<repo>/.jrdev/config.yaml` | Repository jrdev YAML (`config_ready`, `lint` / `unit` / `integration` command lists); must exist and have `config_ready: true` before the pipeline runs |
+| `--integration-blocked` | — | When merge output contains `JRDEV_INTEGRATION_BLOCKED:` — force **`abort`** or **`merge`** (waive); overrides **`meta.integration_blocked_action`**; non-interactive default is **abort** unless meta sets a valid action |
 | `--worktrees` | `.worktrees` | Directory under repo for worktrees (should be gitignored) |
 | `--label` | `agent-queue` | Queue label |
 | `--dry-run` | off | Skip agent smoke in preflight; exit before creating integration/issue worktrees |
@@ -171,7 +214,7 @@ After `go install .`, replace `go run .` with **`jrdev`** (or **`jrdev.exe`**) o
 1. **N** = count of open issues with the queue label; if **N == 0**, exit cleanly.
 2. **Preflight** (once): `git` on PATH and `git version`, `gh auth status`, **`agent`** resolved and able to run `-h` / `--help`; unless `--dry-run`, a minimal **`agent -p`** smoke that must print a fixed token (that prompt forbids shell commands and file edits). Agent invocations use the [permission / `CURSOR_CONFIG_DIR`](#cursor-agent-cli-permissions--p--headless) rules above.
 3. **Integration worktree**: After `git fetch origin`, if a prior run left a resumable **`agent-queue/run-…`** worktree under **`--worktrees`**, an **interactive** terminal prompts: **continue** with that branch and worktree, or **clean** and start fresh (same cleanup as **`--fresh`**). With **non-interactive** stdin, jrdev **resumes** automatically when possible and logs a hint to use **`--fresh`** if you want a clean run. **`--fresh`** skips the prompt and always clears that jrdev state, then creates a new **`agent-queue/run-<timestamp>`** and worktree from **`--integration-base`**.
-4. Each **cycle**: plan (in integration worktree) → parse `<plan>…</plan>` JSON → **one** issue (first row) → issue worktree from integration tip → **implement**, **review** (if there are commits), and **merge** agent phases each loop until stdout contains **`COMPLETE`**, re-rendering the prompt with fresh git history/diff on every attempt (cap: 25 tries per phase); if implement produces zero commits, that phase runs again once the same way → **`go vet ./...`** and **`go test ./...`** on integration → **`gh issue close`** and remove label → push integration branch. **Issue worktrees and `agent-queue/issue-…` branches are not removed here**—they stay under **`--worktrees`** so you can inspect transcripts and diffs across every issue processed in the run.
+4. Each **cycle**: plan (in integration worktree) → parse `<plan>…</plan>` JSON → **one** issue (first row) → issue worktree from integration tip → **implement**, **review** (if there are commits), and **merge** agent phases each loop until stdout contains **`COMPLETE`**, re-rendering the prompt with fresh git history/diff on every attempt (cap: 25 tries per phase); if implement produces zero commits, that phase runs again once the same way → the **merge** prompt directs the agent to run the **integration** commands from **`.jrdev/config.yaml`** after merging → **`git merge`** into the integration worktree (by the agent and/or `jrdev` if needed). If the agent prints **`JRDEV_INTEGRATION_BLOCKED:`**, jrdev applies **`--integration-blocked`**, **`meta.integration_blocked_action`**, or an interactive prompt, then either aborts (issue stays open; integration worktree may reset) or waives and continues. On success: **`gh issue close`** and remove label → push integration branch. **There is no subprocess `go vet` / `go test` quality gate after merge**; preflight is unchanged. **Issue worktrees and `agent-queue/issue-…` branches are not removed here**—they stay under **`--worktrees`** so you can inspect transcripts and diffs across every issue processed in the run.
 5. Stops when the plan returns **`issues: []`**, or **max iterations** is reached, then **`gh pr create`** to **`main`** unless **`--skip-pr`**.
 6. **End of a successful run**: On an **interactive** terminal (real TTY on stdin), `jrdev` asks whether to remove **all** jrdev-linked worktrees under **`--worktrees`** and delete local **`agent-queue/run-*`** / **`agent-queue/issue-*`** branches—the same scope as **`--fresh`**. **Y** / **yes** performs that cleanup; anything else (including Enter) **leaves** trees and branches for inspection. With **non-interactive** stdin (piped or CI), there is **no** prompt and **no** automatic cleanup; run **`jrdev --fresh`** before the next run if you want a clean slate, or delete worktrees/branches manually.
 
@@ -186,9 +229,9 @@ Every Cursor **`agent`** invocation **`jrdev`** launches (preflight smoke, plan,
 | **`.jrdev/agent-runs/<timestamp>-<pid>/prompt.md`** | Exact prompt text passed to the agent (via `-p` pointing at this path, relative to that cwd). |
 | **`.jrdev/agent-runs/<timestamp>-<pid>/output.md`** | Everything the agent process printed (success or failure). |
 
-The first time artifacts are written in a given worktree, **`jrdev`** creates **`.jrdev/.gitignore`** so **`agent-runs/`** is ignored by Git in that tree. If your **`--worktrees`** directory is already gitignored (recommended), those paths usually stay hidden from **`git status`** entirely.
+The first time artifacts are written in a given worktree, **`jrdev`** creates **`.jrdev/.gitignore`** listing **`agent-runs/`** only, so prompts and transcripts under **`.jrdev/agent-runs/`** stay ignored while **`.jrdev/config.yaml`** can remain tracked. If your **`--worktrees`** directory is already gitignored (recommended), those paths usually stay hidden from **`git status`** entirely.
 
-If you run preflight from the **repo root** and **`--worktrees`** is not under an ignored path, consider adding **`.jrdev/`** to your **repository root** `.gitignore` so local transcripts (and the nested `.gitignore`) never clutter **`git status`**.
+If you run from the **repo root** and **`--worktrees`** is not under an ignored path, add **`.jrdev/agent-runs/`** to your **repository root** `.gitignore` (not all of **`.jrdev/`**—you normally want **`config.yaml`** commit-visible).
 
 With **`-v` / `--verbose`**, logs include the artifact directory for each agent run—useful to open the matching **`prompt.md`** and **`output.md`** after a failure.
 
@@ -198,7 +241,7 @@ With **`-v` / `--verbose`**, logs include the artifact directory for each agent 
 - **Interrupted run (Ctrl+C, crash, merge failure, etc.)**: The integration branch and worktrees under **`--worktrees`** are usually left in place (there is **no** end-of-run cleanup prompt because the run did not finish cleanly). On the **next** full run, if a valid **`agent-queue/run-…`** worktree still exists, you get a **resume vs fresh** prompt (TTY) or an automatic **resume** (non-interactive). Choose **fresh** in the prompt, or run **`jrdev --fresh`**, to remove jrdev worktrees under **`--worktrees`** and local **`agent-queue/run-*`** / **`agent-queue/issue-*`** branches before starting a new run.
 - **Zero commits after implement retry**: run aborts; issue is not closed; integration branch and worktrees remain under `.worktrees/` for inspection.
 - **Agent phase never prints `COMPLETE`** (after 25 attempts on implement, review, or merge): run aborts with an error; prompts should instruct the model to include `COMPLETE` when the phase is finished.
-- **Merge / `go vet` / `go test` failure**: fix locally in the integration or issue worktree, or remove worktrees/branches manually (or **`--fresh`** / **fresh** at the resume prompt).
+- **Merge or integration-check failure** (commands from **`.jrdev/config.yaml`**): fix locally in the integration or issue worktree, or remove worktrees/branches manually (or **`--fresh`** / **fresh** at the resume prompt).
 - **SSH auth to `origin`**: ensure `ssh-add` / agent (or HTTPS) works; see **Network / auth** above. **Non-interactive** environments cannot complete interactive `ssh-add` recovery.
 - **Agent smoke or plan/implement errors about blocked tools**: configure **[Cursor agent CLI permissions](#cursor-agent-cli-permissions--p--headless)** (`repo/.cursor/cli-config.json`, `jrdev-agent-permissions.json`, or flags).
 - **Debugging agent failures**: inspect the latest directories under **`.jrdev/agent-runs/`** in the relevant cwd (repo root for smoke, integration or issue worktree for orchestration); see **[Local agent transcripts (`.jrdev/`)](#local-agent-transcripts-jrdev)**.
