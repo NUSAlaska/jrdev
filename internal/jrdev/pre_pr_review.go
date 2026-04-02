@@ -154,10 +154,10 @@ func readBonusSteeringNote() (string, error) {
 
 func writePass2RoundArtifact(artDir string, round int, handoff PrePRPass2Handoff, rawFenceInner string, parseErr string) error {
 	type wrap struct {
-		Round         int             `json:"round"`
-		Handoff       PrePRPass2Handoff `json:"handoff"`
-		HandoffRaw    string          `json:"handoffFenceInner,omitempty"`
-		HandoffError  string          `json:"handoffParseError,omitempty"`
+		Round        int               `json:"round"`
+		Handoff      PrePRPass2Handoff `json:"handoff"`
+		HandoffRaw   string            `json:"handoffFenceInner,omitempty"`
+		HandoffError string            `json:"handoffParseError,omitempty"`
 	}
 	w := wrap{Round: round, Handoff: handoff, HandoffRaw: rawFenceInner, HandoffError: parseErr}
 	if parseErr == "" {
@@ -329,8 +329,7 @@ func RunPrePrReview(cfg Config, prompts PromptBundle, agent AgentRunner, workDir
 		if err != nil {
 			return PRDMatrixDoc{}, err
 		}
-		// Pass 2 prompt includes current round's Pass 1 output in "prior" via CurrentPass1MatrixJSON only;
-		// still pass prior completed rounds for full history (without duplicating current pass-1 file which is not written yet in prior formatter for this round - actually round-XX-pass-1 was just written; formatPriorPassArtifacts(artDir, round-1) excludes current. Good.)
+		// Prior rounds only; this round's matrix is CurrentPass1MatrixJSON (avoids duplicating round-N-pass-1.json).
 		pass2Data := PrePRReviewPass2PromptData{
 			IntegrationBranch:          branch,
 			IntegrationBase:            integrationBase,
