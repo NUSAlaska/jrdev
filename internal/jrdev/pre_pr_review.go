@@ -97,6 +97,25 @@ func newPrePRRunID() (string, error) {
 	return hex.EncodeToString(b[:]), nil
 }
 
+// isValidPrePRRunID returns true for ids produced by newPrePRRunID (8 hex digits).
+// Rejecting other values prevents ".jrdev/pre-pr-review/latest" from embedding ".." or separators in filepath.Join.
+func isValidPrePRRunID(s string) bool {
+	if len(s) != 8 {
+		return false
+	}
+	for i := 0; i < 8; i++ {
+		c := s[i]
+		switch {
+		case c >= '0' && c <= '9':
+		case c >= 'a' && c <= 'f':
+		case c >= 'A' && c <= 'F':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // FormatIssuesMarkdownForPass1 fetches bodies via gh and builds markdown sections.
 func FormatIssuesMarkdownForPass1(cfg Config, issueNums []int) (string, error) {
 	var sb strings.Builder
@@ -897,6 +916,9 @@ func LoadPRPromptPrePRReviewHandoff(workDir string) (h PRPromptPrePRReviewHandof
 	runID := strings.TrimSpace(string(rawLatest))
 	if runID == "" {
 		return PRPromptPrePRReviewHandoff{}, "pre-pr-review: .jrdev/pre-pr-review/latest is empty — PR prompt will use commit/diff context only"
+	}
+	if !isValidPrePRRunID(runID) {
+		return PRPromptPrePRReviewHandoff{}, "pre-pr-review: latest run id is not a valid 8-hex pre-pr-review id — PR prompt will use commit/diff context only"
 	}
 	artDir := filepath.Join(workDir, AgentArtifactsDir, PrePrReviewArtifactsRoot, runID)
 	st, err := os.Stat(artDir)

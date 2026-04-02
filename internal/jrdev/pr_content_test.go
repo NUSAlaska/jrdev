@@ -19,6 +19,25 @@ func TestLoadPRPromptPrePRReviewHandoff_noLatest(t *testing.T) {
 	}
 }
 
+func TestLoadPRPromptPrePRReviewHandoff_invalidRunID(t *testing.T) {
+	tmp := t.TempDir()
+	latest := filepath.Join(tmp, AgentArtifactsDir, PrePrReviewArtifactsRoot, "latest")
+	if err := os.MkdirAll(filepath.Dir(latest), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Path segments in latest would be unsafe in filepath.Join; must be rejected.
+	if err := os.WriteFile(latest, []byte("../evil\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h, warn := LoadPRPromptPrePRReviewHandoff(tmp)
+	if h.Present {
+		t.Fatal("expected present false for invalid run id")
+	}
+	if warn == "" || !strings.Contains(warn, "8-hex") {
+		t.Fatalf("expected invalid id warning, got %q", warn)
+	}
+}
+
 func TestLoadPRPromptPrePRReviewHandoff_missingRunDir(t *testing.T) {
 	tmp := t.TempDir()
 	latest := filepath.Join(tmp, AgentArtifactsDir, PrePrReviewArtifactsRoot, "latest")
