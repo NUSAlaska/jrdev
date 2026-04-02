@@ -51,6 +51,43 @@ func TestPass4FailureFingerprint_includesKind(t *testing.T) {
 	}
 }
 
+func TestPass4FailureFingerprint_kindSeparatesSameLog(t *testing.T) {
+	log := "FAIL same error line"
+	lint := Pass4FailureFingerprint(Pass4Lint, log)
+	unit := Pass4FailureFingerprint(Pass4Unit, log)
+	if lint == unit {
+		t.Fatalf("expected different fingerprints for different kinds: %q", lint)
+	}
+}
+
+func TestNormalizeCheckFailureKey_empty(t *testing.T) {
+	if got := NormalizeCheckFailureKey(""); got != "" {
+		t.Fatalf("got %q", got)
+	}
+	if got := NormalizeCheckFailureKey("   \n\t  "); got != "" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestTruncatePass4Output_longSuccessTruncates(t *testing.T) {
+	const n = 2500
+	s := strings.Repeat("x", n)
+	got := truncatePass4Output(s, true)
+	if !strings.HasSuffix(got, "\n…(truncated)") {
+		t.Fatalf("missing suffix: len=%d", len(got))
+	}
+	if len(got) != 2048+len("\n…(truncated)") {
+		t.Fatalf("len=%d want %d", len(got), 2048+len("\n…(truncated)"))
+	}
+}
+
+func TestTruncatePass4Output_failureNotTruncated(t *testing.T) {
+	s := strings.Repeat("e", 5000)
+	if got := truncatePass4Output(s, false); got != s {
+		t.Fatalf("expected raw failure log preserved")
+	}
+}
+
 func TestRunPass4Checks_emptyPlanSucceeds(t *testing.T) {
 	out := RunPass4Checks(t.TempDir(), nil)
 	if !out.Success || len(out.Steps) != 0 {

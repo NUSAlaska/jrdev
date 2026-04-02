@@ -224,6 +224,34 @@ func TestParsePass5HandoffOptional_valid(t *testing.T) {
 	}
 }
 
+func TestParsePass5HandoffOptional_proseMentionWithoutFence(t *testing.T) {
+	out := "COMPLETE\nSee docs for " + pass5HandoffFenceTag + " format.\n"
+	h, raw, perr := parsePass5HandoffOptional(out)
+	if perr != "" || raw != "" || h != (PrePRPass5Handoff{}) {
+		t.Fatalf("optional handoff absent when only tag is mentioned in prose: h=%+v raw=%q perr=%q", h, raw, perr)
+	}
+}
+
+func TestParsePass5HandoffOptional_invalidJSONInFence(t *testing.T) {
+	body := "```" + pass5HandoffFenceTag + "\nnot-json\n```\n"
+	_, raw, perr := parsePass5HandoffOptional(body)
+	if perr == "" {
+		t.Fatal("expected JSON parse error")
+	}
+	if raw != "not-json" {
+		t.Fatalf("raw=%q", raw)
+	}
+}
+
+func TestParsePass5HandoffOptional_twoFencesErrors(t *testing.T) {
+	tag := pass5HandoffFenceTag
+	body := "```" + tag + "\n{}\n```\n```" + tag + "\n{}\n```\n"
+	_, _, perr := parsePass5HandoffOptional(body)
+	if perr == "" || !strings.Contains(perr, "exactly one") {
+		t.Fatalf("got %q", perr)
+	}
+}
+
 func TestMergePass5HandoffIntoSessionFile(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "handoff.json")

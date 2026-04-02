@@ -244,11 +244,13 @@ func readPass5BonusSteeringNote() (string, error) {
 }
 
 func parsePass5HandoffOptional(agentOut string) (h PrePRPass5Handoff, rawInner string, parseErr string) {
-	if !strings.Contains(agentOut, pass5HandoffFenceTag) {
-		return PrePRPass5Handoff{}, "", ""
-	}
 	inner, err := ExtractSingleMarkdownFence(pass5HandoffFenceTag, agentOut)
 	if err != nil {
+		// Optional handoff: prose may mention the tag name without a real fence.
+		noFenceMsg := fmt.Sprintf("jrdev: no %q fenced code block in agent output", pass5HandoffFenceTag)
+		if err.Error() == noFenceMsg {
+			return PrePRPass5Handoff{}, "", ""
+		}
 		return PrePRPass5Handoff{}, "", err.Error()
 	}
 	rawInner = inner
