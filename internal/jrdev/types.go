@@ -10,6 +10,9 @@ const AgentImplementNoCommitToken = "COMPLETE NO COMMIT"
 // CompletionMarker is a merge-phase convention; any output containing AgentPhaseCompleteToken satisfies validation.
 const CompletionMarker = "<promise>COMPLETE</promise>"
 
+// PrePRReviewBonusCycleSteeringNonInteractive is appended to the bonus Pass 1→2 cycle when stdin is not a TTY (GM-007).
+const PrePRReviewBonusCycleSteeringNonInteractive = "Continue with best judgment: do not ask for user input. Address the remaining matrix gaps and conflicts with minimal, test-backed fixes; use the required commit message prefix for every commit; prefer correctness over scope creep."
+
 // PlannedIssue is one row from planner JSON inside <plan>.
 type PlannedIssue struct {
 	Number int    `json:"number"`

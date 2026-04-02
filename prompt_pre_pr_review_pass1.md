@@ -22,6 +22,18 @@ If a body links to other issues (for example a parent PRD) by URL or `#n`, read 
 Standard input is **not** a TTY. **Do not** wait for user input or ask the operator questions. Use best judgment; proceed deterministically.
 {{end}}
 
+{{if .BonusSteeringNote}}
+## Operator steering (bonus Pass 1→2 cycle)
+
+{{.BonusSteeringNote}}
+
+{{end}}
+{{if .PriorPassArtifactsMarkdown}}
+## Prior pass artifacts (full history so far)
+
+{{.PriorPassArtifactsMarkdown}}
+
+{{end}}
 ## Repository context
 
 Last commits in this worktree:

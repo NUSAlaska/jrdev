@@ -304,6 +304,31 @@ func GitDiffForPrompt(workDir string) (string, error) {
 	return GitDiffForPromptFromBase(workDir, "main")
 }
 
+// GitWorkingTreeClean reports whether git status --porcelain is empty in workDir (no staged/unstaged/untracked changes).
+func GitWorkingTreeClean(workDir string) (bool, error) {
+	c := exec.Command("git", "-C", workDir, "status", "--porcelain")
+	out, err := c.CombinedOutput()
+	if err != nil {
+		return false, fmt.Errorf("git status --porcelain: %w\n%s", err, out)
+	}
+	s := strings.TrimSpace(string(out))
+	return s == "", nil
+}
+
+// RequireGitWorkingTreeClean returns an error when the worktree is not clean, including porcelain output for debugging.
+func RequireGitWorkingTreeClean(workDir string) error {
+	ok, err := GitWorkingTreeClean(workDir)
+	if err != nil {
+		return err
+	}
+	if ok {
+		return nil
+	}
+	c := exec.Command("git", "-C", workDir, "status", "--porcelain")
+	out, _ := c.CombinedOutput()
+	return fmt.Errorf("jrdev pre-pr-review: working tree must be clean before advancing; git status --porcelain:\n%s", strings.TrimSpace(string(out)))
+}
+
 // MergeBranchInDir runs git merge branch --no-edit in workDir.
 func MergeBranchInDir(workDir, branch string) error {
 	c := exec.Command("git", "-C", workDir, "merge", branch, "--no-edit")

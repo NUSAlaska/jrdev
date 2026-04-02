@@ -5,6 +5,17 @@ import (
 	"testing"
 )
 
+func TestPRDMatrixDocHasGaps(t *testing.T) {
+	ok := PRDMatrixDoc{Requirements: []PRDMatrixRow{{Status: "satisfied"}}}
+	if PRDMatrixDocHasGaps(ok) {
+		t.Fatal("satisfied only")
+	}
+	gap := PRDMatrixDoc{Requirements: []PRDMatrixRow{{Status: "not_satisfied"}}}
+	if !PRDMatrixDocHasGaps(gap) {
+		t.Fatal("not_satisfied is a gap")
+	}
+}
+
 func TestExtractSinglePRDMatrixFence(t *testing.T) {
 	s := "intro\n\n```JrDev-PRD-Matrix\n{\"schemaVersion\":\"1\",\"requirements\":[]}\n```\n\nCOMPLETE\n"
 	inner, err := ExtractSinglePRDMatrixFence(s)

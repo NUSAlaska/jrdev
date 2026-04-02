@@ -65,6 +65,26 @@ type PrePRReviewPass1PromptData struct {
 	LintTests         string
 	UnitTests         string
 	NonInteractive    bool
+	PriorPassArtifactsMarkdown string // full serialized prior pass outputs (GM-007)
+	BonusSteeringNote          string // 4th cycle; interactive note or non-interactive best-judgment line
+	Round                      int    // 1-based pass number for this Pass 1 invocation
+}
+
+// PrePRReviewPass2PromptData is passed to prompt_pre_pr_review_pass2.md.
+type PrePRReviewPass2PromptData struct {
+	IntegrationBranch string
+	IntegrationBase   string
+	IssueNumbers      []int
+	IssuesMarkdown    string
+	CommitHistory     string
+	GitDiff           string
+	LintTests         string
+	UnitTests         string
+	NonInteractive    bool
+	PriorPassArtifactsMarkdown string
+	BonusSteeringNote          string
+	Round                      int
+	CurrentPass1MatrixJSON     string // indented JSON from validated matrix this round
 }
 
 // Render treats body as a Go text/template with the given name for errors.

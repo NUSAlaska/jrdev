@@ -3,7 +3,6 @@ package jrdev
 import (
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 )
 
@@ -37,44 +36,20 @@ type PRDMatrixDoc struct {
 	Requirements  []PRDMatrixRow  `json:"requirements"`
 }
 
-var fenceStartRe = regexp.MustCompile("(?i)^```\\s*" + regexp.QuoteMeta(prdMatrixFenceTag) + "\\s*$")
-
 // ExtractSinglePRDMatrixFence returns the inner text of exactly one ```jrdev-prd-matrix fenced block.
 func ExtractSinglePRDMatrixFence(agentOutput string) (inner string, err error) {
-	lines := strings.Split(agentOutput, "\n")
-	var starts []int
-	for i, line := range lines {
-		if fenceStartRe.MatchString(strings.TrimRight(line, "\r")) {
-			starts = append(starts, i)
+	return ExtractSingleMarkdownFence(prdMatrixFenceTag, agentOutput)
+}
+
+// PRDMatrixDocHasGaps reports whether any requirement row still needs Pass 2 attention (GM-007).
+func PRDMatrixDocHasGaps(doc PRDMatrixDoc) bool {
+	for _, row := range doc.Requirements {
+		switch strings.TrimSpace(row.Status) {
+		case "not_satisfied", "unknown", "conflict":
+			return true
 		}
 	}
-	if len(starts) == 0 {
-		return "", fmt.Errorf("jrdev: no %q fenced code block in agent output", prdMatrixFenceTag)
-	}
-	if len(starts) > 1 {
-		return "", fmt.Errorf("jrdev: expected exactly one %q fenced block, found %d", prdMatrixFenceTag, len(starts))
-	}
-	startIdx := starts[0]
-	var endIdx int
-	foundEnd := false
-	for j := startIdx + 1; j < len(lines); j++ {
-		if strings.HasPrefix(strings.TrimRight(lines[j], "\r"), "```") {
-			endIdx = j
-			foundEnd = true
-			break
-		}
-	}
-	if !foundEnd {
-		return "", fmt.Errorf("jrdev: unclosed %q fenced code block", prdMatrixFenceTag)
-	}
-	var b strings.Builder
-	for j := startIdx + 1; j < endIdx; j++ {
-		if b.Len() > 0 {
-			b.WriteByte('\n')
-		}
-		b.WriteString(strings.TrimRight(lines[j], "\r"))
-	}
-	return strings.TrimSpace(b.String()), nil
+	return false
 }
 
 // ValidatePRDMatrixJSON unmarshals and checks GM-005 field constraints.

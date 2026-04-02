@@ -212,3 +212,44 @@ func TestCreateIssueWorktree_CleansStaleBranch(t *testing.T) {
 		t.Fatalf("issue worktree HEAD: %q err=%v", strings.TrimSpace(string(out)), err)
 	}
 }
+
+func TestGitWorkingTreeClean(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	tmp := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", args...)
+		c.Dir = tmp
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	runGit("init", "-b", "main")
+	_ = exec.Command("git", "-C", tmp, "config", "user.email", "t@t").Run()
+	_ = exec.Command("git", "-C", tmp, "config", "user.name", "t").Run()
+	if err := os.WriteFile(filepath.Join(tmp, "f"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit("add", "f")
+	runGit("commit", "-m", "first")
+
+	ok, err := GitWorkingTreeClean(tmp)
+	if err != nil || !ok {
+		t.Fatalf("expected clean after commit, ok=%v err=%v", ok, err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "dirty"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ok2, err := GitWorkingTreeClean(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok2 {
+		t.Fatal("expected dirty with untracked file")
+	}
+	if err := RequireGitWorkingTreeClean(tmp); err == nil {
+		t.Fatal("expected RequireGitWorkingTreeClean error")
+	}
+}

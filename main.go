@@ -14,7 +14,7 @@ import (
 	"github.com/NUSAlaska/jrdev/internal/jrdev"
 )
 
-//go:embed prompt_plan.md prompt_implement.md prompt_review.md prompt_merge.md prompt_pr.md prompt_pre_pr_review_pass1.md
+//go:embed prompt_plan.md prompt_implement.md prompt_review.md prompt_merge.md prompt_pr.md prompt_pre_pr_review_pass1.md prompt_pre_pr_review_pass2.md
 var promptFS embed.FS
 
 func main() {
@@ -306,7 +306,11 @@ func loadPrompts() (jrdev.PromptBundle, error) {
 	if err != nil {
 		return jrdev.PromptBundle{}, err
 	}
-	return jrdev.PromptBundle{Plan: plan, Implement: impl, Review: rev, Merge: mer, PR: pr, PrePRReviewPass1: p1}, nil
+	p2, err := read("prompt_pre_pr_review_pass2.md")
+	if err != nil {
+		return jrdev.PromptBundle{}, err
+	}
+	return jrdev.PromptBundle{Plan: plan, Implement: impl, Review: rev, Merge: mer, PR: pr, PrePRReviewPass1: p1, PrePRReviewPass2: p2}, nil
 }
 
 func programName() string {
@@ -319,7 +323,7 @@ func usage(name string, w io.Writer) {
 	fmt.Fprintf(&b, "Syntax:\n")
 	fmt.Fprintf(&b, "  %s [flags]\n", name)
 	fmt.Fprintf(&b, "  %s init [flags]   interactive setup wizard for .jrdev/config.yaml\n", name)
-	fmt.Fprintf(&b, "  %s pre-pr-review [flags]   issue discovery + Pass 1 PRD matrix on integration branch checkout\n", name)
+		fmt.Fprintf(&b, "  %s pre-pr-review [flags]   issue discovery + Pass 1↔2 pre-PR review loop on integration branch checkout\n", name)
 	fmt.Fprintf(&b, "  %s help\n", name)
 	fmt.Fprintf(&b, "  %s -h | -help | --help\n\n", name)
 	fmt.Fprintf(&b, "Typical calls:\n")
