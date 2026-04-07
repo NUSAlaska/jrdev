@@ -185,11 +185,11 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 		}
 		vlog(cfg, log, "jrdev: verbose: issue #%d body length %d runes\n", job.Number, len([]rune(body)))
 
-		issuePath := IssueWorkPath(workRoot, job.Number, issueSlug)
+		issuePath := IssueWorkPathForBranch(workRoot, job.Branch)
 		vlog(cfg, log, "jrdev: verbose: create issue worktree path=%q from integration %q branch %q\n", issuePath, integrationBranch, job.Branch)
 		baseSHA, err := git.CreateIssueWorktree(issuePath, integrationBranch, job.Branch)
 		if err != nil {
-			return err
+			return formatFilenameTooLongHint(err)
 		}
 		vlog(cfg, log, "jrdev: verbose: issue worktree base SHA %s\n", baseSHA)
 
@@ -399,4 +399,16 @@ func runAgentUntilComplete(cfg Config, agent AgentRunner, log func(string, ...an
 	}
 	return lastOut, fmt.Errorf("jrdev: %s: output never contained %q after %d attempts (last output %d bytes)",
 		phase, AgentPhaseCompleteToken, maxAgentStepAttempts, len(lastOut))
+}
+
+// formatFilenameTooLongHint wraps common Windows git checkout failures with remediation hints.
+func formatFilenameTooLongHint(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := strings.ToLower(err.Error())
+	if !strings.Contains(msg, "filename too long") {
+		return err
+	}
+	return fmt.Errorf("%w\n\njrdev hint (Windows): paths exceeded the legacy length limit — use shorter agent-queue/issue-* branch names in the plan, clone to a shorter parent path, run `git config core.longpaths true`, and/or enable system long paths.", err)
 }

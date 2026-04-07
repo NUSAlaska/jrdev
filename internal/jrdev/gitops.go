@@ -372,7 +372,19 @@ func IntegrationWorkPath(worktreesRoot, integrationBranch string) string {
 	return filepath.Join(worktreesRoot, safe)
 }
 
-// IssueWorkPath is the filesystem path for an issue worktree.
+// IssueWorkPath is the filesystem path for an issue worktree from issue number + title slug.
+// Prefer IssueWorkPathForBranch when the branch name is known: it matches the git branch and stays
+// shorter than a full title slug (important for Windows MAX_PATH with deep repo trees).
 func IssueWorkPath(worktreesRoot string, issueNumber int, slug string) string {
 	return filepath.Join(worktreesRoot, fmt.Sprintf("issue-%d-%s", issueNumber, slug))
+}
+
+// IssueWorkPathForBranch is the directory for an issue worktree, derived from refs/heads/<branch>.
+// Uses the same sanitization as IntegrationWorkPath so folder names align with agent-queue branches.
+func IssueWorkPathForBranch(worktreesRoot, issueBranch string) string {
+	safe := strings.ReplaceAll(strings.TrimPrefix(issueBranch, "agent-queue/"), "/", "_")
+	if safe == "" {
+		safe = "issue"
+	}
+	return filepath.Join(worktreesRoot, safe)
 }

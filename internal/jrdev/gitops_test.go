@@ -161,6 +161,19 @@ func TestBranchMergedIntoHead(t *testing.T) {
 	}
 }
 
+func TestIssueWorkPathForBranch(t *testing.T) {
+	root := filepath.FromSlash("/repo/.worktrees")
+	if g, w := IssueWorkPathForBranch(root, "agent-queue/issue-83-short"), filepath.Join(root, "issue-83-short"); g != w {
+		t.Fatalf("got %q want %q", g, w)
+	}
+	if g, w := IssueWorkPathForBranch(root, "agent-queue/nested/name"), filepath.Join(root, "nested_name"); g != w {
+		t.Fatalf("got %q want %q", g, w)
+	}
+	if g, w := IssueWorkPathForBranch(root, ""), filepath.Join(root, "issue"); g != w {
+		t.Fatalf("empty branch: got %q want %q", g, w)
+	}
+}
+
 func TestCreateIssueWorktree_CleansStaleBranch(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
@@ -192,7 +205,7 @@ func TestCreateIssueWorktree_CleansStaleBranch(t *testing.T) {
 	runGit("worktree", "add", intPath, "integration")
 
 	issueBranch := "agent-queue/issue-1-slug"
-	issuePath := filepath.Join(wtRoot, "issue-1-slug")
+	issuePath := IssueWorkPathForBranch(wtRoot, issueBranch)
 	runGit("worktree", "add", issuePath, "-b", issueBranch, "integration")
 	runGit("worktree", "remove", "--force", issuePath)
 
