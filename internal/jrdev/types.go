@@ -10,6 +10,9 @@ const AgentImplementNoCommitToken = "COMPLETE NO COMMIT"
 // CompletionMarker is a merge-phase convention; any output containing AgentPhaseCompleteToken satisfies validation.
 const CompletionMarker = "<promise>COMPLETE</promise>"
 
+// DefaultPRBaseBranch is the default for Config.PRBase and the --pr-base flag.
+const DefaultPRBaseBranch = "dev"
+
 // PrePRReviewBonusCycleSteeringNonInteractive is appended to the bonus Pass 1→2 cycle when stdin is not a TTY (GM-007).
 const PrePRReviewBonusCycleSteeringNonInteractive = "Continue with best judgment: do not ask for user input. Address the remaining matrix gaps and conflicts with minimal, test-backed fixes; use the required commit message prefix for every commit; prefer correctness over scope creep."
 
@@ -45,6 +48,8 @@ type Config struct {
 	AgentPermissionsFile string
 	GhBin                string
 	Integration          string // rev for new integration branch, default "origin/main"
+	// PRBase is the branch name passed to `gh pr create --base` (e.g. dev, main).
+	PRBase string
 	FreshStart           bool   // if true: skip resume prompt; clean jrdev worktrees/branches then new run
 	// Project is parsed from ProjectPath (.jrdev/config.yaml by default); required before the pipeline runs.
 	Project     ProjectConfig

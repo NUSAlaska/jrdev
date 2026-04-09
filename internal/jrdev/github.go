@@ -132,11 +132,15 @@ func RemoveQueueLabel(cfg Config, number int) error {
 	return nil
 }
 
-// CreatePullRequest opens a PR from head branch to main.
+// CreatePullRequest opens a PR from head branch to cfg.PRBase (default dev).
 func CreatePullRequest(cfg Config, title, body, headBranch string) error {
+	base := strings.TrimSpace(cfg.PRBase)
+	if base == "" {
+		base = DefaultPRBaseBranch
+	}
 	args := []string{
 		"pr", "create",
-		"--base", "main",
+		"--base", base,
 		"--head", headBranch,
 		"--title", title,
 		"--body", body,

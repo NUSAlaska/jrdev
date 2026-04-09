@@ -345,7 +345,11 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 	prCreated := false
 	if !cfg.SkipPR {
 		title, body := PullRequestTitleAndBody(cfg, agent, log, prompts, intPath, integrationBranch)
-		vlog(cfg, log, "jrdev: verbose: gh pr create base=main head=%q title=%q\n", integrationBranch, title)
+		prBase := strings.TrimSpace(cfg.PRBase)
+		if prBase == "" {
+			prBase = DefaultPRBaseBranch
+		}
+		vlog(cfg, log, "jrdev: verbose: gh pr create base=%s head=%q title=%q\n", prBase, integrationBranch, title)
 		if err := CreatePullRequest(cfg, title, body, integrationBranch); err != nil {
 			return err
 		}

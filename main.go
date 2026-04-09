@@ -58,6 +58,7 @@ func run() int {
 	flag.BoolVar(&verbose, "v", false, "verbose logging")
 	flag.BoolVar(&verbose, "verbose", false, "verbose logging (same as -v)")
 	integrationBase := flag.String("integration-base", "origin/main", "rev to branch integration run from")
+	prBase := flag.String("pr-base", jrdev.DefaultPRBaseBranch, "branch for gh pr create --base")
 	fresh := flag.Bool("fresh", false, "discard prior jrdev worktrees/branches (--worktrees + agent-queue/*); skip resume prompt")
 	cleanupOnly := flag.Bool("cleanup", false, "remove jrdev worktrees and agent-queue/* branches from a prior run, then exit (no config, no pipeline)")
 	configPath := flag.String("config", "", "repository jrdev YAML (default: <repo>/.jrdev/config.yaml)")
@@ -245,6 +246,7 @@ func run() int {
 		AgentPermissionsFile: permPath,
 		GhBin:                *ghBin,
 		Integration:          *integrationBase,
+		PRBase:               *prBase,
 		FreshStart:           *fresh,
 		Project:              projectCfg,
 		ProjectPath:          cfgYAML,
@@ -353,6 +355,7 @@ func usage(name string, w io.Writer) {
 		{"--max-iterations n", "Outer loop cap; 0 means 2N+3 where N is open labeled issues at start"},
 		{"-v, --verbose", "Verbose logging (preflight steps, loop phases, agent argv, git/gh subprocess output)"},
 		{"--integration-base rev", "Revision to branch integration runs from, default origin/main"},
+		{"--pr-base branch", "Target branch for gh pr create --base, default " + jrdev.DefaultPRBaseBranch},
 		{"--config path", "Repository jrdev YAML; default <repo>/.jrdev/config.yaml"},
 		{"--integration-blocked abort|merge", "When merge agent emits JRDEV_INTEGRATION_BLOCKED — force stop or waive (overrides meta); default non-interactive is abort unless meta sets integration_blocked_action"},
 		{"--fresh", "Remove jrdev worktrees and agent-queue/* branches; do not resume a prior integration run"},

@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-const prBaseBranch = "main"
-
 // PullRequestTitleAndBody runs the PR-description agent in the integration worktree, or returns
 // fallbacks if the prompt is empty, the agent fails, or output cannot be parsed.
 func PullRequestTitleAndBody(cfg Config, agent AgentRunner, log func(string, ...any), prompts PromptBundle, intPath, integrationBranch string) (title, body string) {
@@ -14,6 +12,10 @@ func PullRequestTitleAndBody(cfg Config, agent AgentRunner, log func(string, ...
 	fallbackBody := fmt.Sprintf("Automated integration branch %q.\n\nLabel %q was processed by jrdev.", integrationBranch, cfg.Label)
 	if log == nil {
 		log = func(string, ...any) {}
+	}
+	prBase := strings.TrimSpace(cfg.PRBase)
+	if prBase == "" {
+		prBase = DefaultPRBaseBranch
 	}
 	if strings.TrimSpace(prompts.PR) == "" {
 		return fallbackTitle, fallbackBody
@@ -24,7 +26,7 @@ func PullRequestTitleAndBody(cfg Config, agent AgentRunner, log func(string, ...
 		if err != nil {
 			return "", err
 		}
-		diff, err := GitDiffForPrompt(intPath)
+		diff, err := GitDiffForPromptFromBase(intPath, prBase)
 		if err != nil {
 			return "", err
 		}
@@ -35,7 +37,7 @@ func PullRequestTitleAndBody(cfg Config, agent AgentRunner, log func(string, ...
 		return Render("pr", prompts.PR, PRPromptData{
 			IntegrationBranch:         integrationBranch,
 			QueueLabel:                cfg.Label,
-			PRBase:                    prBaseBranch,
+			PRBase:                    prBase,
 			CommitHistory:             hist,
 			GitDiff:                   diff,
 			PrePRReviewHandoffPresent: handoff.Present,
