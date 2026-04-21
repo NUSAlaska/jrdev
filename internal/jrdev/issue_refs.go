@@ -42,7 +42,11 @@ func ParseIssueRefsFromGitLogMessage(msg string) []int {
 // GitLogMessagesInRange returns commit messages (format %B) for base..HEAD in workDir.
 func GitLogMessagesInRange(workDir, base string) (string, error) {
 	if strings.TrimSpace(base) == "" {
-		base = "origin/main"
+		var err error
+		base, err = DefaultIntegrationBase(workDir)
+		if err != nil {
+			return "", err
+		}
 	}
 	rng := fmt.Sprintf("%s..HEAD", base)
 	c := execGit(workDir, "log", rng, "--format=%B", "--no-merges")

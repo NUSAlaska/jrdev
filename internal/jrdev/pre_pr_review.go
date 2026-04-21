@@ -138,7 +138,11 @@ func DiscoverPrePrReviewIssueNumbers(cfg Config, workDir string) (nums []int, in
 	}
 	base := strings.TrimSpace(cfg.Integration)
 	if base == "" {
-		base = "origin/main"
+		var berr error
+		base, berr = DefaultIntegrationBase(cfg.RepoRoot)
+		if berr != nil {
+			return nil, "", berr
+		}
 	}
 	fromLog, err := ParseIssueRefsFromGitLogRange(workDir, base)
 	if err != nil {

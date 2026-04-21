@@ -47,7 +47,7 @@ type Config struct {
 	// AgentPermissionsFile is a JSON file with {"allow":["git","go",...],"deny":[]} (bare names become Shell(name)). Materialized to a temp cli-config.json per agent run.
 	AgentPermissionsFile string
 	GhBin                string
-	Integration          string // rev for new integration branch, default "origin/main"
+	Integration          string // rev for new integration branch (CLI default: origin/dev if present, else origin/main)
 	// PRBase is the branch name passed to `gh pr create --base` (e.g. dev, main).
 	PRBase string
 	FreshStart           bool   // if true: skip resume prompt; clean jrdev worktrees/branches then new run

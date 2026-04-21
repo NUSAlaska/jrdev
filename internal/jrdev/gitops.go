@@ -304,6 +304,37 @@ func GitDiffForPrompt(workDir string) (string, error) {
 	return GitDiffForPromptFromBase(workDir, "main")
 }
 
+// GitRefExists reports whether ref resolves to a commit in the repo containing workDir.
+func GitRefExists(workDir, ref string) bool {
+	ref = strings.TrimSpace(ref)
+	if ref == "" || strings.TrimSpace(workDir) == "" {
+		return false
+	}
+	c := exec.Command("git", "-C", workDir, "rev-parse", "--verify", ref)
+	return c.Run() == nil
+}
+
+// DefaultIntegrationBase picks origin/dev or dev if present, otherwise origin/main or main.
+func DefaultIntegrationBase(repoRoot string) (string, error) {
+	if strings.TrimSpace(repoRoot) == "" {
+		return "", fmt.Errorf("jrdev: default integration base: empty repo path")
+	}
+	for _, ref := range []string{"origin/dev", "dev", "origin/main", "main"} {
+		if GitRefExists(repoRoot, ref) {
+			return ref, nil
+		}
+	}
+	return "", fmt.Errorf("jrdev: default integration base: none of origin/dev, dev, origin/main, main resolve in %q", repoRoot)
+}
+
+// ResolveIntegrationBase returns flagValue when non-empty; otherwise DefaultIntegrationBase(repoRoot).
+func ResolveIntegrationBase(repoRoot, flagValue string) (string, error) {
+	if s := strings.TrimSpace(flagValue); s != "" {
+		return s, nil
+	}
+	return DefaultIntegrationBase(repoRoot)
+}
+
 // GitWorkingTreeClean reports whether git status --porcelain is empty in workDir (no staged/unstaged/untracked changes).
 func GitWorkingTreeClean(workDir string) (bool, error) {
 	c := exec.Command("git", "-C", workDir, "status", "--porcelain")

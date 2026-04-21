@@ -105,9 +105,13 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 		}
 	}
 
-	base := cfg.Integration
+	base := strings.TrimSpace(cfg.Integration)
 	if base == "" {
-		base = "origin/main"
+		var berr error
+		base, berr = DefaultIntegrationBase(cfg.RepoRoot)
+		if berr != nil {
+			return berr
+		}
 	}
 	if integrationBranch == "" {
 		vlog(cfg, log, "jrdev: verbose: creating integration branch from base %q\n", base)

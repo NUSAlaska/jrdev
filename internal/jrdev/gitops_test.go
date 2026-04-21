@@ -266,3 +266,130 @@ func TestGitWorkingTreeClean(t *testing.T) {
 		t.Fatal("expected RequireGitWorkingTreeClean error")
 	}
 }
+
+func TestDefaultIntegrationBase_mainOnly(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	tmp := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", args...)
+		c.Dir = tmp
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	runGit("init", "-b", "main")
+	_ = exec.Command("git", "-C", tmp, "config", "user.email", "t@t").Run()
+	_ = exec.Command("git", "-C", tmp, "config", "user.name", "t").Run()
+	if err := os.WriteFile(filepath.Join(tmp, "f"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit("add", "f")
+	runGit("commit", "-m", "first")
+
+	got, err := DefaultIntegrationBase(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "main" {
+		t.Fatalf("got %q want main", got)
+	}
+}
+
+func TestDefaultIntegrationBase_prefersDev(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	tmp := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", args...)
+		c.Dir = tmp
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	runGit("init", "-b", "main")
+	_ = exec.Command("git", "-C", tmp, "config", "user.email", "t@t").Run()
+	_ = exec.Command("git", "-C", tmp, "config", "user.name", "t").Run()
+	if err := os.WriteFile(filepath.Join(tmp, "f"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit("add", "f")
+	runGit("commit", "-m", "first")
+	runGit("branch", "dev")
+
+	got, err := DefaultIntegrationBase(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "dev" {
+		t.Fatalf("got %q want dev", got)
+	}
+}
+
+func TestDefaultIntegrationBase_prefersOriginDev(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	tmp := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", args...)
+		c.Dir = tmp
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	runGit("init", "-b", "main")
+	_ = exec.Command("git", "-C", tmp, "config", "user.email", "t@t").Run()
+	_ = exec.Command("git", "-C", tmp, "config", "user.name", "t").Run()
+	if err := os.WriteFile(filepath.Join(tmp, "f"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit("add", "f")
+	runGit("commit", "-m", "first")
+	runGit("branch", "dev")
+	runGit("update-ref", "refs/remotes/origin/dev", "refs/heads/dev")
+
+	got, err := DefaultIntegrationBase(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "origin/dev" {
+		t.Fatalf("got %q want origin/dev", got)
+	}
+}
+
+func TestResolveIntegrationBase_explicitFlag(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	tmp := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", args...)
+		c.Dir = tmp
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	runGit("init", "-b", "main")
+	_ = exec.Command("git", "-C", tmp, "config", "user.email", "t@t").Run()
+	_ = exec.Command("git", "-C", tmp, "config", "user.name", "t").Run()
+	if err := os.WriteFile(filepath.Join(tmp, "f"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit("add", "f")
+	runGit("commit", "-m", "first")
+
+	got, err := ResolveIntegrationBase(tmp, "custom-base")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "custom-base" {
+		t.Fatalf("got %q", got)
+	}
+}
