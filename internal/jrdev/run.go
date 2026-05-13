@@ -348,7 +348,19 @@ func Run(cfg Config, prompts PromptBundle, agent AgentRunner, log func(string, .
 
 	prCreated := false
 	if !cfg.SkipPR {
-		title, body := PullRequestTitleAndBody(cfg, agent, log, prompts, intPath, integrationBranch)
+		issueNums, _, dErr := DiscoverPrePrReviewIssueNumbers(cfg, intPath)
+		if dErr != nil {
+			return fmt.Errorf("pre-pr-review: discover issues: %w", dErr)
+		}
+		if len(issueNums) > 0 {
+			log("jrdev: pre-pr-review: running for linked issues %v\n", issueNums)
+			if err := execPrePRReview(cfg, prompts, agent, intPath, log, true); err != nil {
+				return fmt.Errorf("pre-pr-review: %w", err)
+			}
+		} else {
+			log("jrdev: pre-pr-review: skipped — no linked GitHub issues on integration commits (add Fixes/Closes/Resolves #n versus integration base)\n")
+		}
+		title, body := PullRequestTitleAndBody(cfg, agent, log, prompts, intPath, integrationBranch, len(issueNums) == 0)
 		prBase := strings.TrimSpace(cfg.PRBase)
 		if prBase == "" {
 			prBase = DefaultPRBaseBranch

@@ -7,7 +7,9 @@ import (
 
 // PullRequestTitleAndBody runs the PR-description agent in the integration worktree, or returns
 // fallbacks if the prompt is empty, the agent fails, or output cannot be parsed.
-func PullRequestTitleAndBody(cfg Config, agent AgentRunner, log func(string, ...any), prompts PromptBundle, intPath, integrationBranch string) (title, body string) {
+// If omitOptionalPrePRHandoffWarn is true, the informational warning about a missing `.jrdev/pre-pr-review/latest`
+// is not logged (e.g. pipeline skipped pre-pr-review because nothing closed an issue via commit refs).
+func PullRequestTitleAndBody(cfg Config, agent AgentRunner, log func(string, ...any), prompts PromptBundle, intPath, integrationBranch string, omitOptionalPrePRHandoffWarn bool) (title, body string) {
 	fallbackTitle := fmt.Sprintf("jrdev: agent-queue integration %s", integrationBranch)
 	fallbackBody := fmt.Sprintf("Automated integration branch %q.\n\nLabel %q was processed by jrdev.", integrationBranch, cfg.Label)
 	if log == nil {
@@ -31,7 +33,7 @@ func PullRequestTitleAndBody(cfg Config, agent AgentRunner, log func(string, ...
 			return "", err
 		}
 		handoff, handoffWarn := LoadPRPromptPrePRReviewHandoff(intPath)
-		if handoffWarn != "" {
+		if handoffWarn != "" && !(omitOptionalPrePRHandoffWarn && strings.Contains(handoffWarn, "no .jrdev/pre-pr-review/latest")) {
 			log("jrdev: warning: %s\n", handoffWarn)
 		}
 		return Render("pr", prompts.PR, PRPromptData{

@@ -486,7 +486,13 @@ func mergeSessionHandoff(last PrePRPass2Handoff, finalRound int, matrixHadGaps b
 }
 
 // RunPrePrReview executes discovery, Pass 1 ↔ Pass 2 loops, Pass 3 test-design review, Pass 4 configured checks, and Pass 5 fix loop, with artifacts and session handoff (GM-007–GM-010, GM-012, GM-014).
+// It runs startup preflight (git/gh/agent smoke); use execPrePRReview with skipStartupPreflight when the caller already invoked RunPreflight.
 func RunPrePrReview(cfg Config, prompts PromptBundle, agent AgentRunner, workDir string, log func(string, ...any)) error {
+	return execPrePRReview(cfg, prompts, agent, workDir, log, false)
+}
+
+// execPrePRReview implements the workflow; skipStartupPreflight avoids a second RunPreflight when the integration pipeline already ran it.
+func execPrePRReview(cfg Config, prompts PromptBundle, agent AgentRunner, workDir string, log func(string, ...any), skipStartupPreflight bool) error {
 	if log == nil {
 		log = func(string, ...any) {}
 	}
@@ -522,9 +528,11 @@ func RunPrePrReview(cfg Config, prompts PromptBundle, agent AgentRunner, workDir
 	}
 	log("jrdev: pre-pr-review: discovered issues %v (integration base %q)\n", issueNums, integrationBase)
 
-	vlog(cfg, log, "jrdev: verbose: pre-pr-review — preflight\n")
-	if err := RunPreflight(cfg, agent, log); err != nil {
-		return err
+	if !skipStartupPreflight {
+		vlog(cfg, log, "jrdev: verbose: pre-pr-review — preflight\n")
+		if err := RunPreflight(cfg, agent, log); err != nil {
+			return err
+		}
 	}
 
 	branch, err := GitCurrentBranch(workDir)
