@@ -1,5 +1,4 @@
 {
-  "build": {
-    "install": "curl -fsSL https://raw.githubusercontent.com/KroniK907/agent-config/v1.0.1/scripts/bootstrap-agent.sh | bash"
-  }
+  "name": "jrdev",
+  "install": "bash .cursor/setup.sh"
 }

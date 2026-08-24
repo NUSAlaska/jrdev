@@ -12,4 +12,5 @@ dist/*
 .cursor/agent-config/
 !.cursor/agent-manifest.json
 !.cursor/environment.json
+!.cursor/setup.sh
 # <<< agent-config-wizard <<<
